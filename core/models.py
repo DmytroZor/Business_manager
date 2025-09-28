@@ -53,9 +53,36 @@ class DeliveryStatus(enum.Enum):
     FAILED = "failed"
 
 
+class UserRole(enum.Enum):
+    CUSTOMER = "customer"
+    COURIER = "courier"
+    ADMIN = "admin"
+
+
 # -----------------
 # Core domain tables
 # -----------------
+
+class User(Base):
+    """Basic user (universal account)"""
+
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    full_name = Column(String(200), nullable=False)
+    phone = Column(String(30), nullable=False, unique=True, index=True)
+    email = Column(String(200), nullable=True, unique=True, index=True)
+    telegram_id = Column(String(100), nullable=True, unique=True, index=True)
+    hashed_password = Column(Text, nullable=True)
+    role = Column(SAEnum(UserRole), nullable=False, default=UserRole.CUSTOMER)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    # relationships
+    customer_profile = relationship("Customer", back_populates="user", uselist=False)
+    courier_profile = relationship("Courier", back_populates="user", uselist=False)
+
 
 class Customer(Base):
     """Stores the customer data.
@@ -67,14 +94,11 @@ class Customer(Base):
     __tablename__ = "customer"
 
     id = Column(Integer, primary_key=True)
-    full_name = Column(String(200), nullable=False)
-    email = Column(String(200), nullable=True, index=True)
-    phone = Column(String(30), nullable=False, unique=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     # relationships
     addresses = relationship("Address", back_populates="customer", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="customer")
+    user = relationship("User", back_populates="customer_profile")
 
 
 class Address(Base):
@@ -115,15 +139,12 @@ class Courier(Base):
     __tablename__ = "courier"
 
     id = Column(Integer, primary_key=True)
-    full_name = Column(String(200), nullable=False)
-    phone = Column(String(30), nullable=False, unique=True)
+    users_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     vehicle_info = Column(String(200), nullable=True)  # bike, car, etc.
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
     # relationships
     deliveries = relationship("Delivery", back_populates="courier")
-
+    user = relationship("User", back_populates="courier_profile")
 
 class Product(Base):
     """Represents a fish product type available for sale.
@@ -147,7 +168,6 @@ class Product(Base):
 
     # relationships
     order_items = relationship("OrderItem", back_populates="product")
-
 
 
 # -------------------------
@@ -205,7 +225,6 @@ class OrderItem(Base):
     order_id = Column(Integer, ForeignKey("order.id", ondelete="CASCADE"), nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("product.id", ondelete="RESTRICT"), nullable=False)
 
-
     unit_price = Column(Numeric(10, 2), nullable=False)
     quantity = Column(Float, nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
@@ -213,7 +232,6 @@ class OrderItem(Base):
     # relationships
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
-
 
 
 class Payment(Base):
@@ -308,8 +326,7 @@ class Review(Base):
 def calculate_order_totals(order):
     """Fill order.total_amount and each item.subtotal based on unit_price and quantity.
 
-    - This is a simple helper; in real code, you should also consider taxes, discounts, rounding rules, and
-      currency considerations.
+    - This is a simple helper;
     - Should be called before persisting an order if items changed.
     """
     total = 0
@@ -318,5 +335,3 @@ def calculate_order_totals(order):
         total += item.subtotal
     order.total_amount = round(total, 2)
 
-
-# End of file
