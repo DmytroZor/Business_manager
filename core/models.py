@@ -319,19 +319,4 @@ class Review(Base):
     # We intentionally do not create back_populates for reviews to keep them lightweight; add if you need.
 
 
-# -----------------
-# Helpful utility functions
-# -----------------
-
-def calculate_order_totals(order):
-    """Fill order.total_amount and each item.subtotal based on unit_price and quantity.
-
-    - This is a simple helper;
-    - Should be called before persisting an order if items changed.
-    """
-    total = 0
-    for item in order.items:
-        item.subtotal = float(item.unit_price) * float(item.quantity)
-        total += item.subtotal
-    order.total_amount = round(total, 2)
 
