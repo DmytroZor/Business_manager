@@ -26,7 +26,6 @@ class ProductOut(BaseModel):
     unit: str
     is_active: bool
     created_at: datetime
-
     model_config = {"from_attributes": True}
 
 
@@ -36,6 +35,8 @@ class ProductCreate(BaseModel):
     base_unit_price: Decimal = Field(..., gt=0)
     unit: str = Field(default="kg", max_length=20)
     is_active: bool = True
+
+
 
 
 class ProductUpdate(BaseModel):
