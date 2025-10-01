@@ -16,11 +16,11 @@ You can iterate on these models (add fields, indexes, constraints) depending on 
 NOTE: This file is intentionally verbose in comments to explain the logic of tables and relationships.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 import enum
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, ForeignKey, Text,
-    Numeric, Enum as SAEnum, Float, UniqueConstraint, Index
+    Numeric, Enum as SAEnum, Float, UniqueConstraint, Index, Date
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -65,7 +65,6 @@ class UserRole(enum.Enum):
 
 class User(Base):
     """Basic user (universal account)"""
-
 
     __tablename__ = "users"
 
@@ -146,6 +145,7 @@ class Courier(Base):
     deliveries = relationship("Delivery", back_populates="courier")
     user = relationship("User", back_populates="courier_profile")
 
+
 class Product(Base):
     """Represents a fish product type available for sale.
 
@@ -153,20 +153,24 @@ class Product(Base):
     - base_unit_price: standard price per unit (could be per kg or per piece depending on unit)
     - unit: textual description of unit, e.g. 'kg', 'piece'
     - is_active: if the product is discontinued, set False
-
-
     """
+
     __tablename__ = "product"
 
     id = Column(Integer, primary_key=True)
+    external_id = Column(String(100), nullable=True, index=True)  # id у великій базі (для імпорту/upsert)
     name = Column(String(200), nullable=False, index=True)
+    sku = Column(String(64), nullable=True, unique=True)
     description = Column(Text, nullable=True)
-    base_unit_price = Column(Numeric(10, 2), nullable=False)
+    base_unit_price = Column(Numeric(10, 2), nullable=False)  # поточна ціна
     unit = Column(String(20), nullable=False, default="kg")
-    is_active = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)  # чи показувати в каталозі
+    available_today = Column(Boolean, default=True, nullable=False)
+    available_from = Column(Date, nullable=True)  # очікувана дата доступності, якщо not available_today
+    can_backorder = Column(Boolean, default=False, nullable=False)  # можна замовити під замовлення
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
 
-    # relationships
     order_items = relationship("OrderItem", back_populates="product")
 
 
@@ -218,20 +222,24 @@ class OrderItem(Base):
     - subtotal: unit_price * quantity (denormalized)
 
     Reasoning: Denormalized prices allow price changes after order creation without affecting historical orders.
-    """
+        """
     __tablename__ = "order_item"
 
     id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("order.id", ondelete="CASCADE"), nullable=False, index=True)
-    product_id = Column(Integer, ForeignKey("product.id", ondelete="RESTRICT"), nullable=False)
+    order_id = Column(Integer, ForeignKey("order.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True)
+
+    # snapshot (щоб чек був постійним)
+    product_name = Column(String(200), nullable=False)
+    product_sku = Column(String(64), nullable=True)
+    unit = Column(String(20), nullable=False)
 
     unit_price = Column(Numeric(10, 2), nullable=False)
     quantity = Column(Float, nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
 
-    # relationships
-    order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
+    order = relationship("Order", back_populates="items")
 
 
 class Payment(Base):
@@ -317,6 +325,3 @@ class Review(Base):
 
     # relationships (optional)
     # We intentionally do not create back_populates for reviews to keep them lightweight; add if you need.
-
-
-
