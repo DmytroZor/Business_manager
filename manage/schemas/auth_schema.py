@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import Annotated
+from core.models import UserRole
 
-PhoneStr = Annotated[str, Field(regex=r'^\+?380\d{9}$')]
+PhoneStr = Annotated[str, Field(pattern=r'^\+?380\d{9}$')]
 
 
-def phone_number_normalizer(v:str):
+def phone_number_normalizer(v: str):
     num = ''.join(filter(str.isdigit, v))
     if len(num) == 10:  # 0XXXXXXXXX
         num = '38' + num
@@ -30,9 +31,25 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     phone_number: str
+    user_role: UserRole
+
     @field_validator("phone_number")
     @classmethod
     def normalize(cls, v): return phone_number_normalizer(v)
+
+
+class UserOut(BaseModel):
+    id: int
+    full_name: str
+    phone: str
+    email: str | None
+    role: UserRole
+
+
+class UserRegisterResponse(BaseModel):
+    user: UserOut
+    access_token: str
+    token_type: str = "bearer"
 
 
 class CourierCreate(BaseModel):

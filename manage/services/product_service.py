@@ -1,19 +1,18 @@
 from decimal import InvalidOperation, Decimal
-
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from manage.schemas.product_schema import ProductCreate, ProductUpdate, SortOrder
+from manage.schemas.product_schema import ProductCreate, ProductUpdate, SortOrder, SortField, ActiveStatus
 from core.models import Product
 from sqlalchemy import select
-from typing import Optional
-
+from additional import sku_generator
 
 async def create_product(db: AsyncSession, product_data: ProductCreate):
     product = Product(name=product_data.name,
                       description=product_data.description,
                       base_unit_price=product_data.base_unit_price,
                       unit=product_data.unit,
-                      is_active=product_data.is_active)
+                      is_active=product_data.is_active,
+                      sku = sku_generator.generate_sku())
     db.add(product)
     await db.commit()
     await db.refresh(product)
@@ -128,15 +127,23 @@ async def product_delete_by_id(db: AsyncSession, product_id: int):
     return True
 
 
-async def get_all_products(db: AsyncSession, sort_order: SortOrder, offset: int, limit: int,
+async def get_all_products(db: AsyncSession,
+                           sort_field: SortField,
+                           active_status: ActiveStatus,
+                           sort_order: SortOrder,
+                           offset: int,
+                           limit: int,
                            ):
-    products = select(Product)
+    if active_status == ActiveStatus.all_products:
+        products = select(Product)
+    if active_status == ActiveStatus.active_products:
+        products = select(Product).where(Product.is_active == True)
+    if active_status == ActiveStatus.inactive_products:
+        products = select(Product).where(Product.is_active == False)
 
-    # if product_name:
-    #     products = products.where(Product.name.ilike(f"%{product_name}"))
+    sort_col = getattr(Product, sort_field)
 
-    sort_col = Product.name
-    if sort_order == "desc":
+    if sort_order == SortOrder.desc:
         products = products.order_by(sort_col.desc())
     else:
         products = products.order_by(sort_col.asc())

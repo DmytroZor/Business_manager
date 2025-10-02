@@ -10,7 +10,12 @@ from sqlalchemy import NotNullable
 class SortField(str, Enum):
     name = "name"
     base_unit_price = "base_unit_price"
-    is_active = "is_active"
+
+
+class ActiveStatus(str, Enum):
+    active_products = 'is_active'
+    inactive_products = 'inactive'
+    all_products = "all"
 
 
 class SortOrder(str, Enum):
@@ -20,6 +25,7 @@ class SortOrder(str, Enum):
 
 class ProductOut(BaseModel):
     id: int
+    sku:str
     name: str
     description: Optional[str] = None
     base_unit_price: Decimal
