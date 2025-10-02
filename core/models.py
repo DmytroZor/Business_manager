@@ -114,13 +114,10 @@ class Address(Base):
 
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customer.id", ondelete="CASCADE"), nullable=False, index=True)
-    label = Column(String(50), nullable=True)  # e.g., 'Home', 'Work'
     street = Column(String(255), nullable=False)
     building = Column(String(50), nullable=True)
     apartment = Column(String(50), nullable=True)
     notes = Column(Text, nullable=True)  # additional delivery instructions
-    lat = Column(Float, nullable=True)
-    lon = Column(Float, nullable=True)
 
     created_at = Column(DateTime, default=datetime.now, nullable=False)
 
@@ -165,9 +162,7 @@ class Product(Base):
     base_unit_price = Column(Numeric(10, 2), nullable=False)  # поточна ціна
     unit = Column(String(20), nullable=False, default="kg")
     is_active = Column(Boolean, default=True, nullable=False)  # чи показувати в каталозі
-    available_today = Column(Boolean, default=True, nullable=False)
     available_from = Column(Date, nullable=True)  # очікувана дата доступності, якщо not available_today
-    can_backorder = Column(Boolean, default=False, nullable=False)  # можна замовити під замовлення
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
 
