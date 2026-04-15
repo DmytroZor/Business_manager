@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str
     jwt_expiration: int
+    jwt_refresh_expiration: int
 
     class Config:
         env_file = Path(__file__).resolve().parent.parent/".env"
