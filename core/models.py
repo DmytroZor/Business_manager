@@ -1,0 +1,345 @@
+"""
+SQLAlchemy models for a Fish Delivery application (single-city business)
+
+This file contains:
+- Declarative SQLAlchemy models (classes) representing the database tables.
+- Clear comments for each table explaining its purpose, foreign keys and relationships.
+
+Business assumptions baked into the schema:
+- Delivery operates in a single city (no cities table required).
+- Orders are placed by Customers, fulfilled by Couriers, and consist of multiple OrderItems.
+- Delivery is modeled as a separate Delivery entity to allow multiple delivery attempts, statuses and assignment to a courier.
+- Payments are recorded separately from orders to allow multiple payment attempts/refunds.
+
+You can iterate on these models (add fields, indexes, constraints) depending on performance and product needs.
+
+NOTE: This file is intentionally verbose in comments to explain the logic of tables and relationships.
+"""
+
+from datetime import date
+import enum
+from sqlalchemy import (
+    Column, Integer, String, Boolean, DateTime, ForeignKey, Text,
+    Numeric, Enum as SAEnum, CheckConstraint, Index, Date, UniqueConstraint, func
+)
+from sqlalchemy.orm import declarative_base, relationship
+
+Base = declarative_base()
+
+
+# --- Enums ---
+class OrderStatus(enum.Enum):
+    DRAFT = "draft"
+    PLACED = "placed"
+    PAID = "paid"
+    PREPARING = "preparing"
+    OUT_FOR_DELIVERY = "out_for_delivery"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+
+
+class PaymentStatus(enum.Enum):
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class DeliveryStatus(enum.Enum):
+    PENDING = "pending"
+    ASSIGNED = "assigned"
+    PICKED_UP = "picked_up"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class UserRole(enum.Enum):
+    CUSTOMER = "customer"
+    COURIER = "courier"
+    ADMIN = "admin"
+
+
+# -----------------
+# Core domain tables
+# -----------------
+
+class User(Base):
+    """Basic user (universal account)"""
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    full_name = Column(String(200), nullable=False)
+    phone = Column(String(30), nullable=False, unique=True, index=True)
+    email = Column(String(200), nullable=True, unique=True, index=True)
+    telegram_id = Column(String(100), nullable=True, unique=True, index=True)
+    hashed_password = Column(Text, nullable=True)
+    role = Column(SAEnum(UserRole), nullable=False, default=UserRole.CUSTOMER)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # relationships
+    customer_profile = relationship("Customer", back_populates="user", uselist=False)
+    courier_profile = relationship("Courier", back_populates="user", uselist=False)
+
+
+class Customer(Base):
+    """Stores the customer data.
+
+    - We separate Customer from Address so a customer can have multiple delivery addresses
+      (home, work, etc.) even if the service is in one city.
+    - phone is used for contact and unique constraint to avoid exact duplicates.
+    """
+    __tablename__ = "customer"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    # relationships
+    addresses = relationship("Address", back_populates="customer", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="customer")
+    reviews = relationship("Review", back_populates="customer")
+    user = relationship("User", back_populates="customer_profile")
+
+
+class Address(Base):
+    """Delivery addresses for customers.
+
+    Fields:
+    - customer_id: FK to Customer
+    - street / building / apartment: textual fields. Could be normalized further but are left simple.
+    - lat/lon: optional coordinates to enable routing optimizations.
+
+    Reasoning: Keeping addresses separate allows a customer to save multiple addresses and re-use them.
+    """
+    __tablename__ = "address"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customer.id", ondelete="CASCADE"), nullable=False, index=True)
+    street = Column(String(255), nullable=False)
+    building = Column(String(20), nullable=False)
+    apartment = Column(String(20), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    customer = relationship("Customer", back_populates="addresses")
+    orders = relationship("Order", back_populates="delivery_address")
+    __table_args__ = (
+        UniqueConstraint("customer_id", "street", "building", "apartment", name="uq_address_customer_location"),
+    )
+
+
+class Courier(Base):
+    """Delivery worker (courier) who picks up prepared fish orders and delivers them.
+
+    - phone unique so we can contact and identify couriers.
+    - is_active indicates whether the courier is currently available to accept assignments.
+    """
+    __tablename__ = "courier"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    vehicle_info = Column(String(200), nullable=True)  # bike, car, etc.
+
+    # relationships
+    deliveries = relationship("Delivery", back_populates="courier")
+    user = relationship("User", back_populates="courier_profile")
+
+
+class Product(Base):
+    """Represents a fish product type available for sale.
+
+    - name: e.g., 'Salmon fillet', 'Trout whole'
+    - base_unit_price: standard price per unit (could be per kg or per piece depending on unit)
+    - unit: textual description of unit, e.g. 'kg', 'piece'
+    - is_active: if the product is discontinued, set False
+    """
+
+    __tablename__ = "product"
+
+    id = Column(Integer, primary_key=True)
+    external_id = Column(String(100), nullable=True, index=True)  # id у великій базі (для імпорту/upsert)
+    name = Column(String(200), nullable=False, index=True)
+    sku = Column(String(64), nullable=True, unique=True)
+    description = Column(Text, nullable=True)
+    base_unit_price = Column(Numeric(10, 2), nullable=False)  # поточна ціна
+    unit = Column(String(20), nullable=False, default="kg")
+    is_active = Column(Boolean, default=True, nullable=False)  # чи показувати в каталозі
+    available_from = Column(Date, nullable=True)  # очікувана дата доступності, якщо not available_today
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    order_items = relationship("OrderItem", back_populates="product")
+    reviews = relationship("Review", back_populates="product")
+    __table_args__ = (
+        CheckConstraint("base_unit_price > 0", name="ck_product_base_unit_price_positive"),
+    )
+
+
+# -------------------------
+# Orders, items, and payment
+# -------------------------
+
+class Order(Base):
+    """Customer order placed on the platform.
+
+    - customer_id: FK to Customer
+    - delivery_address_id: FK to Address (where to deliver)
+    - status: order lifecycle (placed, paid, preparing, out_for_delivery, etc.)
+    - total_amount: denormalized total price snapshot at order creation
+    - note: optional notes from the customer
+
+    An order can have multiple OrderItems. The order's totals should be re-calculated when items change.
+    """
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customer.id", ondelete="SET NULL"), nullable=True, index=True)
+    delivery_address_id = Column(Integer, ForeignKey("address.id", ondelete="SET NULL"), nullable=True)
+    status = Column(SAEnum(OrderStatus), nullable=False, default=OrderStatus.PLACED)
+    placed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    total_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    note = Column(Text, nullable=True)
+    # relationships
+    customer = relationship("Customer", back_populates="orders")
+    delivery_address = relationship("Address", back_populates="orders")
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="order")
+    deliveries = relationship("Delivery", back_populates="order")
+    reviews = relationship("Review", back_populates="order")
+
+    # Index to speed queries for recent orders
+    __table_args__ = (
+        Index("ix_order_customer_status", "customer_id", "status"),
+    )
+
+
+class OrderItem(Base):
+    """A single line in an order (a product and requested quantity).
+
+    - order_id: FK to Order
+    - product_id: FK to Product
+
+    - unit_price: denormalized price at time of ordering
+    - quantity: how many units (kg or pieces) the customer requested
+    - subtotal: unit_price * quantity (denormalized)
+
+    Reasoning: Denormalized prices allow price changes after order creation without affecting historical orders.
+        """
+    __tablename__ = "order_item"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True)
+
+    # snapshot (щоб чек був постійним)
+    product_name = Column(String(200), nullable=False)
+    product_sku = Column(String(64), nullable=True)
+    unit = Column(String(20), nullable=False)
+
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    quantity = Column(Numeric(10, 3), nullable=False)
+    subtotal = Column(Numeric(10, 2), nullable=False)
+
+    product = relationship("Product", back_populates="order_items")
+    order = relationship("Order", back_populates="items")
+    __table_args__ = (
+        CheckConstraint("unit_price > 0", name="ck_order_item_unit_price_positive"),
+        CheckConstraint("quantity > 0", name="ck_order_item_quantity_positive"),
+        CheckConstraint("subtotal >= 0", name="ck_order_item_subtotal_non_negative"),
+    )
+
+
+class Payment(Base):
+    """Payment attempts and records for an order.
+
+    - order_id: FK to Order
+    - provider: textual name if multiple payment providers in future
+    - amount: paid amount
+    - status: pending/success/failed/refunded
+    - transaction_id: provider transaction reference to reconcile
+
+    Reasoning: Payments are in a separate table because there might be multiple attempts, refunds, or partial payments.
+    """
+    __tablename__ = "payment"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(100), nullable=True)
+    amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(SAEnum(PaymentStatus), nullable=False, default=PaymentStatus.PENDING)
+    transaction_id = Column(String(200), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # relationship
+    order = relationship("Order", back_populates="payments")
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payment_amount_positive"),
+        UniqueConstraint("transaction_id", name="uq_payment_transaction_id"),
+    )
+
+
+# -----------------
+# Delivery handling
+# -----------------
+
+class Delivery(Base):
+    """Represents a delivery attempt/assignment for an order.
+
+    - We separate Delivery from Order to allow:
+      * Multiple attempts (e.g. first attempt failed, second attempt made)
+      * Assigning a courier and tracking pickup/delivery timestamps and statuses
+    - courier_id: FK to Courier (nullable until assigned)
+    - order_id: FK to Order (one-to-many: one order can have multiple deliveries over time)
+    - scheduled_at: optional scheduled pickup time
+    - picked_up_at / delivered_at: timestamps recorded by courier
+    - fee: any additional delivery fee captured at assignment time
+    """
+    __tablename__ = "delivery"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    courier_id = Column(Integer, ForeignKey("courier.id", ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(SAEnum(DeliveryStatus), nullable=False, default=DeliveryStatus.PENDING)
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    picked_up_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    failed_reason = Column(Text, nullable=True)
+    fee = Column(Numeric(8, 2), nullable=False, default=0)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # relationships
+    order = relationship("Order", back_populates="deliveries")
+    courier = relationship("Courier", back_populates="deliveries")
+    __table_args__ = (
+        CheckConstraint("fee >= 0", name="ck_delivery_fee_non_negative"),
+        Index("ix_delivery_courier_status", "courier_id", "status"),
+    )
+
+
+# -----------------
+# Optional: Reviews
+# -----------------
+class Review(Base):
+    """Customer reviews for delivered orders/products.
+
+    - order_id: FK to Order (link review to an order)
+    - product_id: FK to Product (optional) if review is about a specific product
+    - rating: integer rating, comment: textual feedback
+    """
+    __tablename__ = "review"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customer.id", ondelete="SET NULL"), nullable=True)
+    rating = Column(Integer, nullable=False)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_review_rating_between_1_5"),
+    )
+    order = relationship("Order", back_populates="reviews")
+    product = relationship("Product", back_populates="reviews")
+    customer = relationship("Customer", back_populates="reviews")
