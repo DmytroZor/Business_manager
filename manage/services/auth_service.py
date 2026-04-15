@@ -1,11 +1,12 @@
-from passlib.hash import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from core.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from core.models import User
 from sqlalchemy import select
 from core.models import UserRole, Customer, Courier
+from fastapi import HTTPException
 from manage.schemas.auth_schema import PhoneNumber, UserCreate
 from passlib.context import CryptContext
 
@@ -62,16 +63,24 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
                 phone=user_data.phone_number,
                 role=user_data.user_role)
     db.add(user)
-    await db.flush()  # щоб згенерувався user.id
+    try:
+        await db.flush()  # щоб згенерувався user.id
 
-    if user.role == UserRole.CUSTOMER:
-        customer = Customer(user_id=user.id)
-        db.add(customer)
+        if user.role == UserRole.CUSTOMER:
+            customer = Customer(user_id=user.id)
+            db.add(customer)
 
-    elif user.role == UserRole.COURIER:
-        courier = Courier(user_id=user.id)
-        db.add(courier)
+        elif user.role == UserRole.COURIER:
+            courier = Courier(user_id=user.id)
+            db.add(courier)
 
-    await db.commit()
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="User with this email or phone already exists")
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Database error while creating user")
+
     await db.refresh(user)
     return user

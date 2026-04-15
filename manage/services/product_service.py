@@ -1,4 +1,5 @@
 from decimal import InvalidOperation, Decimal
+from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from manage.schemas.product_schema import ProductCreate, ProductUpdate, SortOrder, SortField, ActiveStatus
@@ -12,11 +13,15 @@ async def create_product(db: AsyncSession, product_data: ProductCreate):
                       base_unit_price=product_data.base_unit_price,
                       unit=product_data.unit,
                       is_active=product_data.is_active,
-                      sku = sku_generator.generate_sku())
+                      sku=sku_generator.generate_sku())
     db.add(product)
-    await db.commit()
-    await db.refresh(product)
-    return product
+    try:
+        await db.commit()
+        await db.refresh(product)
+        return product
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Database error while creating product")
 
 
 async def get_product_by_id(db: AsyncSession, product_id: int):
@@ -45,14 +50,11 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
     cleaned: dict = {}
     for k, v in update_data.items():
         if k not in allowed_fields:
-            # ігноруємо невідомі поля (або кидаємо помилку)
-            continue
+            raise HTTPException(status_code=422, detail=f"Field '{k}' cannot be updated")
 
         # Якщо поле не nullable і передано explicit null -> ігноруємо або кидаємо помилку
         if v is None and k in non_nullable:
-            # можна: raise ValueError(f"{k} cannot be null")
-            # або просто continue (щоб не перезаписати)
-            continue
+            raise HTTPException(status_code=422, detail=f"Field '{k}' cannot be null")
 
         # спеціальна обробка для base_unit_price (Decimal)
         if k == "base_unit_price" and v is not None:
@@ -60,20 +62,20 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
             if isinstance(v, str):
                 cleaned_str = "".join(ch for ch in v if ch.isdigit() or ch == ".")
                 if cleaned_str == "":
-                    continue
+                    raise HTTPException(status_code=422, detail="base_unit_price has invalid format")
                 try:
                     dec = Decimal(cleaned_str)
                 except InvalidOperation:
-                    continue  # або raise
+                    raise HTTPException(status_code=422, detail="base_unit_price has invalid format")
             else:
                 # якщо це число (int/float/Decimal)
                 try:
                     dec = Decimal(str(v))
                 except InvalidOperation:
-                    continue
+                    raise HTTPException(status_code=422, detail="base_unit_price has invalid format")
             # бізнес-правило: ціна > 0
             if dec <= 0:
-                continue  # або raise ValueError("price must be > 0")
+                raise HTTPException(status_code=422, detail="base_unit_price must be greater than 0")
             cleaned[k] = dec
             continue
 
@@ -81,7 +83,7 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
         if k == "name" and v is not None:
             v = v.strip()
             if v == "":
-                continue
+                raise HTTPException(status_code=422, detail="name cannot be empty")
             cleaned[k] = v
             continue
 
@@ -89,7 +91,7 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
         if k == "unit" and v is not None:
             v = v.strip()
             if len(v) == 0 or len(v) > 20:
-                continue
+                raise HTTPException(status_code=422, detail="unit must be between 1 and 20 characters")
 
             # if v not in allowed_units: continue
             cleaned[k] = v
@@ -104,6 +106,9 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
         cleaned[k] = v
 
     # 4. застосувати зміни
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="No valid fields provided for update")
+
     for field, value in cleaned.items():
         setattr(product, field, value)
 
@@ -113,7 +118,7 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
         await db.refresh(product)
     except SQLAlchemyError:
         await db.rollback()
-        raise
+        raise HTTPException(status_code=500, detail="Database error while updating product")
 
     return product
 
@@ -123,8 +128,12 @@ async def product_delete_by_id(db: AsyncSession, product_id: int):
     if not product:
         return False
     await db.delete(product)
-    await db.commit()
-    return True
+    try:
+        await db.commit()
+        return True
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Database error while deleting product")
 
 
 async def get_all_products(db: AsyncSession,
@@ -137,9 +146,9 @@ async def get_all_products(db: AsyncSession,
     if active_status == ActiveStatus.all_products:
         products = select(Product)
     if active_status == ActiveStatus.active_products:
-        products = select(Product).where(Product.is_active == True)
+        products = select(Product).where(Product.is_active.is_(True))
     if active_status == ActiveStatus.inactive_products:
-        products = select(Product).where(Product.is_active == False)
+        products = select(Product).where(Product.is_active.is_(False))
 
     sort_col = getattr(Product, sort_field)
 
