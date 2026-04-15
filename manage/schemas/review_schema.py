@@ -3,6 +3,6 @@ from typing import List
 
 
 class CreateReview(BaseModel):
-    rating:int = Field(..., ge = 0, le = 5)
+    rating:int = Field(..., ge = 1, le = 5)
     comment:str | None = Field(max_length=255)
 

@@ -5,8 +5,8 @@ from datetime import datetime
 
 class AddressBase(BaseModel):
     street: str = Field(..., max_length=255)
-    building: Optional[str] = Field(None, max_length=50)
-    apartment: Optional[str] = Field(None, max_length=50)
+    building: str = Field(..., min_length=1, max_length=20)
+    apartment: Optional[str] = Field(None, max_length=20)
     notes: Optional[str] = None
 
 
@@ -18,16 +18,14 @@ class AddressCreate(AddressBase):
 class AddressUpdate(BaseModel):
     """Схема для оновлення (всі поля необов'язкові)"""
     street: Optional[str] = Field(None, max_length=255)
-    building: Optional[str] = Field(None, max_length=50)
-    apartment: Optional[str] = Field(None, max_length=50)
+    building: Optional[str] = Field(None, min_length=1, max_length=20)
+    apartment: Optional[str] = Field(None, max_length=20)
     notes: Optional[str] = None
 
 
 class AddressOut(AddressBase):
     """Схема для віддачі назовні"""
-    id: int
-    customer_id: int
-    created_at: datetime
+    pass
 
     class Config:
-        from_attributes = True   # щоб працювало з ORM
+        from_attributes = True

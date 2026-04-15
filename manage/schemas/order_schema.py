@@ -1,29 +1,49 @@
-from pydantic import BaseModel, Field, field_validator, computed_field
-from typing import List
+from datetime import datetime
 from decimal import Decimal, ROUND_DOWN
-from product_schema import ProductOut
+from typing import List
+
+from pydantic import BaseModel, Field, field_validator
+
+from core.models import OrderStatus
 
 
 class OrderItemCreate(BaseModel):
-    unit_price: Decimal = Field(..., gt=0)
+    product_id: int = Field(..., gt=0)
     quantity: Decimal = Field(..., gt=0)
 
     @field_validator("quantity")
     @classmethod
-    def validate_quantity(cls, v: Decimal) -> Decimal:
-        # округляємо до 2 знаків після коми
-        v = v.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-        # перевіряємо, чи після округлення не змінилось
-        if v != v:
-            raise ValueError("Неправильна точність quantity, максимум 2 знаки після коми")
-        return v
-
-    @computed_field
-    @property
-    def subtotal(self) -> Decimal:
-        return (self.unit_price * self.quantity).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    def validate_quantity(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.001"), rounding=ROUND_DOWN)
 
 
-class OrdersOut(BaseModel):
-    items: List[OrderItemCreate] = []
-    total_amount: Decimal  # сума всіх subtotal
+class OrderCreate(BaseModel):
+    delivery_address_id: int = Field(..., gt=0)
+    note: str | None = Field(default=None, max_length=2000)
+    items: List[OrderItemCreate] = Field(..., min_length=1)
+
+
+class OrderItemOut(BaseModel):
+    id: int
+    product_id: int | None
+    product_name: str
+    product_sku: str | None
+    unit: str
+    unit_price: Decimal
+    quantity: Decimal
+    subtotal: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class OrderOut(BaseModel):
+    id: int
+    customer_id: int | None
+    delivery_address_id: int | None
+    status: OrderStatus
+    placed_at: datetime
+    total_amount: Decimal
+    note: str | None
+    items: List[OrderItemOut]
+
+    model_config = {"from_attributes": True}
