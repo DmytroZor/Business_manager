@@ -19,7 +19,7 @@ def phone_number_normalizer(v: str):
 
 
 class PhoneNumber(BaseModel):
-    phone_number: str
+    phone_number: str = Field(..., description="Ukrainian phone number. Accepted formats include +380XXXXXXXXX and 0XXXXXXXXX.")
 
     @field_validator("phone_number")
     @classmethod
@@ -27,11 +27,11 @@ class PhoneNumber(BaseModel):
 
 
 class UserCreate(BaseModel):
-    full_name: str = Field(..., min_length=3)
-    email: EmailStr
-    password: str = Field(..., min_length=6)
-    phone_number: str
-    user_role: UserRole
+    full_name: str = Field(..., min_length=3, description="User full name.")
+    email: EmailStr = Field(..., description="Unique user email address.")
+    password: str = Field(..., min_length=6, description="User password. Minimum 6 characters.")
+    phone_number: str = Field(..., description="User phone number. Will be normalized to +380 format.")
+    user_role: UserRole = Field(..., description="Role assigned to the new user.")
 
     @field_validator("phone_number")
     @classmethod
@@ -39,23 +39,23 @@ class UserCreate(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: int
-    full_name: str
-    phone: str
-    email: str | None
-    role: UserRole
+    id: int = Field(..., description="User identifier.")
+    full_name: str = Field(..., description="User full name.")
+    phone: str = Field(..., description="Normalized user phone number.")
+    email: str | None = Field(None, description="User email.")
+    role: UserRole = Field(..., description="User role.")
 
 
 class UserRegisterResponse(BaseModel):
-    user: UserOut
-    access_token: str
-    token_type: str = "bearer"
+    user: UserOut = Field(..., description="Registered user details.")
+    access_token: str = Field(..., description="JWT access token.")
+    token_type: str = Field(default="bearer", description="OAuth2 token type.")
 
 
 class CourierCreate(BaseModel):
-    vehicle_info: str = Field(min_length=8, max_length=8)
+    vehicle_info: str = Field(min_length=8, max_length=8, description="Courier vehicle information code.")
 
 
 class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    access_token: str = Field(..., description="JWT access token.")
+    token_type: str = Field(default="bearer", description="OAuth2 token type.")

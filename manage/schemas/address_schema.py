@@ -1,31 +1,31 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
 
 
 class AddressBase(BaseModel):
-    street: str = Field(..., max_length=255)
-    building: str = Field(..., min_length=1, max_length=20)
-    apartment: Optional[str] = Field(None, max_length=20)
-    notes: Optional[str] = None
+    street: str = Field(..., max_length=255, description="Street name.")
+    building: str = Field(..., min_length=1, max_length=20, description="Building identifier, for example 10A.")
+    apartment: Optional[str] = Field(None, max_length=20, description="Apartment, office, or unit number.")
+    notes: Optional[str] = Field(None, description="Optional delivery notes.")
 
 
 class AddressCreate(AddressBase):
-    """Схема для створення адреси"""
+    """Schema for address creation."""
     pass
 
 
 class AddressUpdate(BaseModel):
-    """Схема для оновлення (всі поля необов'язкові)"""
-    street: Optional[str] = Field(None, max_length=255)
-    building: Optional[str] = Field(None, min_length=1, max_length=20)
-    apartment: Optional[str] = Field(None, max_length=20)
-    notes: Optional[str] = None
+    """Schema for address updates (all fields optional)."""
+    street: Optional[str] = Field(None, max_length=255, description="Updated street name.")
+    building: Optional[str] = Field(None, min_length=1, max_length=20, description="Updated building identifier.")
+    apartment: Optional[str] = Field(None, max_length=20, description="Updated apartment or unit.")
+    notes: Optional[str] = Field(None, description="Updated delivery notes.")
 
 
 class AddressOut(AddressBase):
-    """Схема для віддачі назовні"""
-    pass
+    """Schema returned by address endpoints."""
+    id: int = Field(..., description="Address identifier.")
+    customer_id: int = Field(..., description="Customer profile identifier.")
 
     class Config:
         from_attributes = True
