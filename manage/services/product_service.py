@@ -131,8 +131,8 @@ async def get_all_products(db: AsyncSession,
                            sort_field: SortField,
                            active_status: ActiveStatus,
                            sort_order: SortOrder,
-                           offset: int,
-                           limit: int,
+                           offset: int = 0,
+                           limit: int = 10,
                            ):
     if active_status == ActiveStatus.all_products:
         products = select(Product)
