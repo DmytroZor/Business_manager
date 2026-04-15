@@ -69,7 +69,7 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
         db.add(customer)
 
     elif user.role == UserRole.COURIER:
-        courier = Courier(users_id=user.id)
+        courier = Courier(user_id=user.id)
         db.add(courier)
 
     await db.commit()
