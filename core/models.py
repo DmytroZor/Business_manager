@@ -16,11 +16,11 @@ You can iterate on these models (add fields, indexes, constraints) depending on 
 NOTE: This file is intentionally verbose in comments to explain the logic of tables and relationships.
 """
 
-from datetime import datetime, date
+from datetime import date
 import enum
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, ForeignKey, Text,
-    Numeric, Enum as SAEnum, Float, UniqueConstraint, Index, Date
+    Numeric, Enum as SAEnum, CheckConstraint, Index, Date, UniqueConstraint, func
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -76,7 +76,7 @@ class User(Base):
     hashed_password = Column(Text, nullable=True)
     role = Column(SAEnum(UserRole), nullable=False, default=UserRole.CUSTOMER)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     # relationships
     customer_profile = relationship("Customer", back_populates="user", uselist=False)
@@ -97,6 +97,7 @@ class Customer(Base):
     # relationships
     addresses = relationship("Address", back_populates="customer", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="customer")
+    reviews = relationship("Review", back_populates="customer")
     user = relationship("User", back_populates="customer_profile")
 
 
@@ -115,15 +116,16 @@ class Address(Base):
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customer.id", ondelete="CASCADE"), nullable=False, index=True)
     street = Column(String(255), nullable=False)
-    building = Column(String(50), nullable=True)
-    apartment = Column(String(50), nullable=True)
-    notes = Column(Text, nullable=True)  # additional delivery instructions
+    building = Column(String(20), nullable=False)
+    apartment = Column(String(20), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-
-    # relationship
     customer = relationship("Customer", back_populates="addresses")
     orders = relationship("Order", back_populates="delivery_address")
+    __table_args__ = (
+        UniqueConstraint("customer_id", "street", "building", "apartment", name="uq_address_customer_location"),
+    )
 
 
 class Courier(Base):
@@ -135,7 +137,7 @@ class Courier(Base):
     __tablename__ = "courier"
 
     id = Column(Integer, primary_key=True)
-    users_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     vehicle_info = Column(String(200), nullable=True)  # bike, car, etc.
 
     # relationships
@@ -163,10 +165,14 @@ class Product(Base):
     unit = Column(String(20), nullable=False, default="kg")
     is_active = Column(Boolean, default=True, nullable=False)  # чи показувати в каталозі
     available_from = Column(Date, nullable=True)  # очікувана дата доступності, якщо not available_today
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-    updated_at = Column(DateTime, default=datetime.now, nullable=False, onupdate=datetime.now)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     order_items = relationship("OrderItem", back_populates="product")
+    reviews = relationship("Review", back_populates="product")
+    __table_args__ = (
+        CheckConstraint("base_unit_price > 0", name="ck_product_base_unit_price_positive"),
+    )
 
 
 # -------------------------
@@ -184,13 +190,13 @@ class Order(Base):
 
     An order can have multiple OrderItems. The order's totals should be re-calculated when items change.
     """
-    __tablename__ = "order"
+    __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customer.id", ondelete="SET NULL"), nullable=True, index=True)
     delivery_address_id = Column(Integer, ForeignKey("address.id", ondelete="SET NULL"), nullable=True)
     status = Column(SAEnum(OrderStatus), nullable=False, default=OrderStatus.PLACED)
-    placed_at = Column(DateTime, default=datetime.now, nullable=False)
+    placed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     total_amount = Column(Numeric(10, 2), nullable=False, default=0)
     note = Column(Text, nullable=True)
     # relationships
@@ -199,6 +205,7 @@ class Order(Base):
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="order")
     deliveries = relationship("Delivery", back_populates="order")
+    reviews = relationship("Review", back_populates="order")
 
     # Index to speed queries for recent orders
     __table_args__ = (
@@ -221,7 +228,7 @@ class OrderItem(Base):
     __tablename__ = "order_item"
 
     id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("order.id", ondelete="CASCADE"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True)
 
     # snapshot (щоб чек був постійним)
@@ -230,11 +237,16 @@ class OrderItem(Base):
     unit = Column(String(20), nullable=False)
 
     unit_price = Column(Numeric(10, 2), nullable=False)
-    quantity = Column(Float, nullable=False)
+    quantity = Column(Numeric(10, 3), nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
 
     product = relationship("Product", back_populates="order_items")
     order = relationship("Order", back_populates="items")
+    __table_args__ = (
+        CheckConstraint("unit_price > 0", name="ck_order_item_unit_price_positive"),
+        CheckConstraint("quantity > 0", name="ck_order_item_quantity_positive"),
+        CheckConstraint("subtotal >= 0", name="ck_order_item_subtotal_non_negative"),
+    )
 
 
 class Payment(Base):
@@ -251,15 +263,19 @@ class Payment(Base):
     __tablename__ = "payment"
 
     id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("order.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     provider = Column(String(100), nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     status = Column(SAEnum(PaymentStatus), nullable=False, default=PaymentStatus.PENDING)
     transaction_id = Column(String(200), nullable=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     # relationship
     order = relationship("Order", back_populates="payments")
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payment_amount_positive"),
+        UniqueConstraint("transaction_id", name="uq_payment_transaction_id"),
+    )
 
 
 # -----------------
@@ -281,21 +297,25 @@ class Delivery(Base):
     __tablename__ = "delivery"
 
     id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("order.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
     courier_id = Column(Integer, ForeignKey("courier.id", ondelete="SET NULL"), nullable=True, index=True)
     status = Column(SAEnum(DeliveryStatus), nullable=False, default=DeliveryStatus.PENDING)
-    scheduled_at = Column(DateTime, nullable=True)
-    assigned_at = Column(DateTime, nullable=True)
-    picked_up_at = Column(DateTime, nullable=True)
-    delivered_at = Column(DateTime, nullable=True)
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    picked_up_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
     failed_reason = Column(Text, nullable=True)
     fee = Column(Numeric(8, 2), nullable=False, default=0)
 
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     # relationships
     order = relationship("Order", back_populates="deliveries")
     courier = relationship("Courier", back_populates="deliveries")
+    __table_args__ = (
+        CheckConstraint("fee >= 0", name="ck_delivery_fee_non_negative"),
+        Index("ix_delivery_courier_status", "courier_id", "status"),
+    )
 
 
 # -----------------
@@ -311,12 +331,15 @@ class Review(Base):
     __tablename__ = "review"
 
     id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("order.id", ondelete="SET NULL"), nullable=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
     product_id = Column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True)
     customer_id = Column(Integer, ForeignKey("customer.id", ondelete="SET NULL"), nullable=True)
     rating = Column(Integer, nullable=False)
     comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.now, nullable=False)
-
-    # relationships (optional)
-    # We intentionally do not create back_populates for reviews to keep them lightweight; add if you need.
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_review_rating_between_1_5"),
+    )
+    order = relationship("Order", back_populates="reviews")
+    product = relationship("Product", back_populates="reviews")
+    customer = relationship("Customer", back_populates="reviews")
