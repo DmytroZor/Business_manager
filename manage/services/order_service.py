@@ -25,58 +25,60 @@ async def get_customer_by_user_id(db: AsyncSession, user_id: int) -> Customer:
 async def create_order(db: AsyncSession, user_id: int, order_data: OrderCreate) -> Order:
     order_id: int | None = None
     try:
-        async with db.begin():
-            customer = await get_customer_by_user_id(db, user_id)
+        customer = await get_customer_by_user_id(db, user_id)
 
-            address_result = await db.execute(
-                select(Address).where(
-                    Address.id == order_data.delivery_address_id,
-                    Address.customer_id == customer.id,
-                )
+        address_result = await db.execute(
+            select(Address).where(
+                Address.id == order_data.delivery_address_id,
+                Address.customer_id == customer.id,
             )
-            address = address_result.scalar_one_or_none()
-            if not address:
-                raise HTTPException(status_code=400, detail="Delivery address does not belong to the customer")
+        )
+        address = address_result.scalar_one_or_none()
+        if not address:
+            raise HTTPException(status_code=400, detail="Delivery address does not belong to the customer")
 
-            order = Order(
-                customer_id=customer.id,
-                delivery_address_id=order_data.delivery_address_id,
-                note=order_data.note,
-                total_amount=Decimal("0.00"),
+        order = Order(
+            customer_id=customer.id,
+            delivery_address_id=order_data.delivery_address_id,
+            note=order_data.note,
+            total_amount=Decimal("0.00"),
+        )
+        db.add(order)
+        await db.flush()
+        order_id = order.id
+
+        total_amount = Decimal("0.00")
+        for item in order_data.items:
+            product_result = await db.execute(
+                select(Product).where(Product.id == item.product_id, Product.is_active == True)
             )
-            db.add(order)
-            await db.flush()
-            order_id = order.id
+            product = product_result.scalar_one_or_none()
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found or inactive")
 
-            total_amount = Decimal("0.00")
-            for item in order_data.items:
-                product_result = await db.execute(
-                    select(Product).where(Product.id == item.product_id, Product.is_active == True)
-                )
-                product = product_result.scalar_one_or_none()
-                if not product:
-                    raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found or inactive")
+            unit_price = _quantize_money(Decimal(product.base_unit_price))
+            subtotal = _quantize_money(unit_price * item.quantity)
 
-                unit_price = _quantize_money(Decimal(product.base_unit_price))
-                subtotal = _quantize_money(unit_price * item.quantity)
+            order_item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                product_sku=product.sku,
+                unit=product.unit,
+                unit_price=unit_price,
+                quantity=item.quantity,
+                subtotal=subtotal,
+            )
+            db.add(order_item)
+            total_amount += subtotal
 
-                order_item = OrderItem(
-                    order_id=order.id,
-                    product_id=product.id,
-                    product_name=product.name,
-                    product_sku=product.sku,
-                    unit=product.unit,
-                    unit_price=unit_price,
-                    quantity=item.quantity,
-                    subtotal=subtotal,
-                )
-                db.add(order_item)
-                total_amount += subtotal
-
-            order.total_amount = _quantize_money(total_amount)
+        order.total_amount = _quantize_money(total_amount)
+        await db.commit()
     except HTTPException:
+        await db.rollback()
         raise
     except SQLAlchemyError:
+        await db.rollback()
         raise HTTPException(status_code=500, detail="Database error while creating order")
 
     if order_id is None:
