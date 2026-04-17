@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, Sequence
-
+from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +25,11 @@ async def _get_order(db: AsyncSession, order_id: int) -> Order:
 
 
 async def _get_courier_by_id(db: AsyncSession, courier_id: int) -> Courier:
-    stmt = select(Courier).where(Courier.id == courier_id)
+    stmt = (
+        select(Courier)
+        .options(selectinload(Courier.user))
+        .where(Courier.id == courier_id)
+    )
     result = await db.execute(stmt)
     courier = result.scalar_one_or_none()
     if not courier:
@@ -65,12 +69,14 @@ async def assign_delivery(
             detail="Courier account is inactive",
         )
 
+    now = datetime.now(timezone.utc)
+
     delivery = Delivery(
         order_id=order.id,
         courier_id=courier.id,
         status=DeliveryStatus.ASSIGNED,
         scheduled_at=payload.scheduled_at,
-        assigned_at=None,
+        assigned_at=now,
         fee=payload.fee,
     )
 
@@ -122,7 +128,7 @@ async def pick_up_delivery(db: AsyncSession, delivery_id: int, courier_id: int) 
         )
 
     delivery.status = DeliveryStatus.PICKED_UP
-    delivery.picked_up_at = delivery.picked_up_at or delivery.assigned_at
+    delivery.picked_up_at = datetime.now(timezone.utc)
     delivery.order.status = OrderStatus.OUT_FOR_DELIVERY
 
     await db.commit()
@@ -143,7 +149,7 @@ async def complete_delivery(db: AsyncSession, delivery_id: int, courier_id: int)
         )
 
     delivery.status = DeliveryStatus.DELIVERED
-    delivery.delivered_at = delivery.delivered_at or delivery.picked_up_at
+    delivery.delivered_at = datetime.now(timezone.utc)
     delivery.order.status = OrderStatus.DELIVERED
 
     await db.commit()
