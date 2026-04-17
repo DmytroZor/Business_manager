@@ -8,7 +8,7 @@ from core.models import User
 from manage.docs.api_docs import USER_DOCS, ERROR_RESPONSES
 from manage.schemas.auth_schema import UserCreate, UserOut, Token, UserRegisterResponse, phone_number_normalizer
 from manage.services.auth_service import create_user, create_access_token, decode_token, verify_password
-
+from sqlalchemy.orm import selectinload
 router = APIRouter(prefix="/users", tags=["Users"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
@@ -23,10 +23,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    stmt = (
+        select(User)
+        .options(
+            selectinload(User.courier_profile),
+            selectinload(User.customer_profile),
+        )
+        .where(User.id == user_id)
+    )
+    result = await db.execute(stmt)
     user = result.scalar_one_or_none()
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
     return user
 
 
