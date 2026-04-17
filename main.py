@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 
 from core.db import engine
-from routers import product_router, user_router, address_router, order_router
+from routers import product_router, user_router, address_router, order_router, delivery_router, review_router
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -175,3 +175,5 @@ app.include_router(product_router.router)
 app.include_router(user_router.router)
 app.include_router(address_router.router)
 app.include_router(order_router.router)
+app.include_router(delivery_router.router)
+app.include_router(review_router.router)
