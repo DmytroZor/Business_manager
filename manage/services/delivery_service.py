@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,10 @@ from manage.schemas.delivery_schema import DeliveryAssignCreate, DeliveryStatusU
 async def _get_order(db: AsyncSession, order_id: int) -> Order:
     stmt = (
         select(Order)
-        .options(selectinload(Order.deliveries), selectinload(Order.items))
+        .options(
+            selectinload(Order.deliveries),
+            selectinload(Order.items),
+        )
         .where(Order.id == order_id)
     )
     result = await db.execute(stmt)
@@ -40,7 +44,10 @@ async def _get_courier_by_id(db: AsyncSession, courier_id: int) -> Courier:
 async def _get_delivery(db: AsyncSession, delivery_id: int) -> Delivery:
     stmt = (
         select(Delivery)
-        .options(selectinload(Delivery.order), selectinload(Delivery.courier))
+        .options(
+            selectinload(Delivery.order),
+            selectinload(Delivery.courier),
+        )
         .where(Delivery.id == delivery_id)
     )
     result = await db.execute(stmt)
@@ -63,10 +70,28 @@ async def assign_delivery(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Selected user is not a courier",
         )
+
     if not courier.user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Courier account is inactive",
+        )
+
+    if order.status not in {OrderStatus.PLACED, OrderStatus.PREPARING}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order is not in a state that allows delivery assignment",
+        )
+
+    active_delivery_statuses = {
+        DeliveryStatus.ASSIGNED,
+        DeliveryStatus.PENDING,
+        DeliveryStatus.PICKED_UP,
+    }
+    if any(delivery.status in active_delivery_statuses for delivery in order.deliveries):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Order already has an active delivery",
         )
 
     now = datetime.now(timezone.utc)
