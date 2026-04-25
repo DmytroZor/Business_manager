@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from manage.schemas.address_schema import AddressCreate, AddressUpdate
 from core.models import Address, Customer
-
+#address_service
 
 async def address_create(db: AsyncSession, address_data: AddressCreate, customer_id: int):
     # customer_id тут — це Customer.id

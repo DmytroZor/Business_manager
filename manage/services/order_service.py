@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from core.models import Address, Customer, Order, OrderItem, Product, OrderStatus
 from manage.schemas.order_schema import OrderCreate
 
+#order_service
 
 def _quantize_money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_DOWN)

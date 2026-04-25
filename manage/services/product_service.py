@@ -7,6 +7,8 @@ from core.models import Product
 from sqlalchemy import select
 from additional import sku_generator
 
+#product_service
+
 async def create_product(db: AsyncSession, product_data: ProductCreate):
     product = Product(name=product_data.name,
                       description=product_data.description,
@@ -145,9 +147,9 @@ async def get_all_products(db: AsyncSession,
                            ):
     if active_status == ActiveStatus.all_products:
         products = select(Product)
-    if active_status == ActiveStatus.active_products:
+    elif active_status == ActiveStatus.active_products:
         products = select(Product).where(Product.is_active.is_(True))
-    if active_status == ActiveStatus.inactive_products:
+    else:
         products = select(Product).where(Product.is_active.is_(False))
 
     sort_col = getattr(Product, sort_field)

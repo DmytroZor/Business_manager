@@ -1,48 +1,77 @@
+import logging
+import time
+
 from datetime import datetime, timezone
 from http import HTTPStatus
 
-from core.db import engine
-from routers import product_router, user_router, address_router, order_router, delivery_router, review_router
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
+
+from core.db import engine
 from core import models
+
+from routers import (
+    product_router,
+    user_router,
+    address_router,
+    order_router,
+    delivery_router,
+    review_router,
+)
+
 from manage.schemas.error_schema import ErrorResponse, ValidationErrorResponse
 
+logging.basicConfig(
+    level=logging.INFO,  # змінюй на DEBUG при глибокому дебазі
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+# SQLAlchemy логування (увімкни INFO/DEBUG якщо треба бачити SQL)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 tags_metadata = [
-    {
-        "name": "Users",
-        "description": "User registration and authentication endpoints.",
-    },
-    {
-        "name": "Products",
-        "description": "Product catalog management and browsing.",
-    },
-    {
-        "name": "Address",
-        "description": "Customer delivery address management.",
-    },
-    {
-        "name": "Orders",
-        "description": "Customer order creation and tracking.",
-    },
+    {"name": "Users", "description": "User registration and authentication endpoints."},
+    {"name": "Products", "description": "Product catalog management and browsing."},
+    {"name": "Address", "description": "Customer delivery address management."},
+    {"name": "Orders", "description": "Customer order creation and tracking."},
 ]
 
 app = FastAPI(
     title="Business Manage System API",
     version="1.0.0",
-    description=(
-        "Async FastAPI backend for user authentication, product catalog management, "
-        "customer addresses, and order processing."
-    ),
-    contact={
-        "name": "Business Manage System",
-    },
+    description="Async FastAPI backend",
     openapi_tags=tags_metadata,
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+
+    logger.info(f"{request.method} {request.url.path} started")
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(f"{request.method} {request.url.path} failed")
+        raise
+
+    process_time = time.time() - start_time
+
+    logger.info(
+        f"{request.method} {request.url.path} completed "
+        f"status={response.status_code} time={process_time:.3f}s"
+    )
+
+    return response
+
 
 def custom_openapi():
     if app.openapi_schema:
@@ -102,17 +131,22 @@ async def init_models():
 
 @app.on_event("startup")
 async def on_startup():
+    logger.info("Application startup")
     await init_models()
+    logger.info("Database initialized")
 
 
-@app.get("/", tags=["Users"], summary="API health endpoint", description="Simple endpoint to verify that the API is running.")
+@app.get("/")
 async def root():
-    return {"status": "ok", "message": "Business Manage System API is running"}
+    return {"status": "ok"}
 
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logger.warning(f"HTTP {exc.status_code} {request.url.path}: {exc.detail}")
+
     reason = HTTPStatus(exc.status_code).phrase if exc.status_code in HTTPStatus._value2member_map_ else "HTTP Error"
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -128,6 +162,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning(f"Validation error {request.url.path}: {exc.errors()}")
+
     return JSONResponse(
         status_code=422,
         content={
@@ -143,6 +179,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error(f"Database error {request.url.path}: {str(exc)}")
+
     return JSONResponse(
         status_code=500,
         content={
@@ -158,6 +196,8 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled error {request.url.path}")
+
     return JSONResponse(
         status_code=500,
         content={
@@ -170,6 +210,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         },
     )
 
+
+# ================= ROUTERS =================
 
 app.include_router(product_router.router)
 app.include_router(user_router.router)

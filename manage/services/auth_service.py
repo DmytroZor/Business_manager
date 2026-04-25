@@ -1,5 +1,8 @@
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
+
+from sqlalchemy.orm import selectinload
+
 from core.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
@@ -10,8 +13,11 @@ from fastapi import HTTPException
 from manage.schemas.auth_schema import PhoneNumber, UserCreate
 from passlib.context import CryptContext
 
+# auth_service
+
 # створюємо контекст bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -19,6 +25,7 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
 
 def create_access_token(data: dict, expires_seconds: int | None = None) -> str:
     to_encode = data.copy()
@@ -57,14 +64,17 @@ async def get_user_by_phone_number(db: AsyncSession, phone_number: PhoneNumber):
 
 
 async def create_user(db: AsyncSession, user_data: UserCreate):
-    user = User(full_name=user_data.full_name,
-                email=user_data.email,
-                hashed_password=hash_password(user_data.password),
-                phone=user_data.phone_number,
-                role=user_data.user_role)
+    user = User(
+        full_name=user_data.full_name,
+        email=user_data.email,
+        hashed_password=hash_password(user_data.password),
+        phone=user_data.phone_number,
+        role=user_data.user_role,
+    )
     db.add(user)
+
     try:
-        await db.flush()  # щоб згенерувався user.id
+        await db.flush()
 
         if user.role == UserRole.CUSTOMER:
             customer = Customer(user_id=user.id)
@@ -75,6 +85,18 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
             db.add(courier)
 
         await db.commit()
+
+        # Повертаємо вже свіжо завантаженого користувача
+        result = await db.execute(
+            select(User)
+            .options(
+                selectinload(User.customer_profile),
+                selectinload(User.courier_profile),
+            )
+            .where(User.id == user.id)
+        )
+        user = result.scalar_one_or_none()
+
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=400, detail="User with this email or phone already exists")
@@ -82,5 +104,7 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
         await db.rollback()
         raise HTTPException(status_code=500, detail="Database error while creating user")
 
-    await db.refresh(user)
+    if not user:
+        raise HTTPException(status_code=500, detail="User was created but could not be reloaded")
+
     return user

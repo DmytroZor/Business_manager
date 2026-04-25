@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from core.models import DeliveryStatus, Order, OrderStatus, Product, Review
 from manage.schemas.review_schema import CreateReview
 
+#review_service
 
 async def _get_order(db: AsyncSession, order_id: int) -> Order:
     stmt = (

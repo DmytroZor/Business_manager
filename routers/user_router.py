@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from jose import JWTError
 from core.db import get_db
 from core.models import User
 from manage.docs.api_docs import USER_DOCS, ERROR_RESPONSES
@@ -14,13 +14,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+
     try:
         payload = decode_token(token)
         user_id_str: str | None = payload.get("sub")
         if user_id_str is None:
             raise HTTPException(status_code=401, detail="Invalid authentication")
         user_id = int(user_id_str)
-    except Exception:
+    except (JWTError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     stmt = (
