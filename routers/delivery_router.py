@@ -1,16 +1,18 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from core.models import Courier
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.db import get_db
-from core.models import User, UserRole, DeliveryStatus
+from core.models import Courier, DeliveryStatus, User, UserRole
 from manage.schemas.delivery_schema import (
     DeliveryAssignCreate,
     DeliveryOut,
+    DeliverySelfAssignCreate,
     DeliveryStatusUpdate,
 )
+from manage.schemas.order_schema import OrderOut
 from manage.services import delivery_service
 from routers.user_router import get_current_user
 
@@ -63,6 +65,40 @@ async def assign_delivery_to_order(
 ):
     _ensure_role(current_user, UserRole.ADMIN)
     return await delivery_service.assign_delivery(db, order_id, payload)
+
+
+@router.get(
+    "/available-orders",
+    response_model=List[OrderOut],
+    status_code=status.HTTP_200_OK,
+    summary="List available orders for courier self-assignment",
+    description="Returns orders that are ready to be taken by couriers and do not have active delivery assignments.",
+)
+async def get_available_orders(
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    _ensure_role(current_user, UserRole.COURIER, UserRole.ADMIN)
+    return await delivery_service.get_available_orders_for_courier(db, limit=limit, offset=offset)
+
+
+@router.post(
+    "/orders/{order_id}/self-assign",
+    response_model=DeliveryOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Courier self-assigns an order",
+    description="Authenticated courier takes an available order into personal delivery queue.",
+)
+async def self_assign_delivery_to_order(
+        order_id: int,
+        payload: DeliverySelfAssignCreate,
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    _ensure_role(current_user, UserRole.COURIER)
+    return await delivery_service.self_assign_delivery(db, order_id, current_user.id, payload)
 
 
 @router.get(

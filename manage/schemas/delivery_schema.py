@@ -20,6 +20,18 @@ class DeliveryAssignCreate(BaseModel):
     )
 
 
+class DeliverySelfAssignCreate(BaseModel):
+    scheduled_at: Optional[datetime] = Field(
+        default=None,
+        description="Optional planned pickup/delivery time",
+    )
+    fee: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        description="Delivery fee",
+    )
+
+
 class DeliveryStatusUpdate(BaseModel):
     failed_reason: Optional[str] = Field(
         default=None,

@@ -32,6 +32,11 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=6, description="User password. Minimum 6 characters.")
     phone_number: str = Field(..., description="User phone number. Will be normalized to +380 format.")
     user_role: UserRole = Field(..., description="Role assigned to the new user.")
+    telegram_id: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional Telegram user identifier for immediate account linking.",
+    )
 
     @field_validator("phone_number")
     @classmethod
@@ -43,6 +48,7 @@ class UserOut(BaseModel):
     full_name: str = Field(..., description="User full name.")
     phone: str = Field(..., description="Normalized user phone number.")
     email: str | None = Field(None, description="User email.")
+    telegram_id: str | None = Field(None, description="Linked Telegram user identifier.")
     role: UserRole = Field(..., description="User role.")
 
 
@@ -59,3 +65,19 @@ class CourierCreate(BaseModel):
 class Token(BaseModel):
     access_token: str = Field(..., description="JWT access token.")
     token_type: str = Field(default="bearer", description="OAuth2 token type.")
+
+
+class TelegramLinkPayload(BaseModel):
+    telegram_id: str = Field(..., min_length=1, max_length=100, description="Telegram user identifier.")
+
+
+class AdminUserSummaryOut(BaseModel):
+    user_id: int = Field(..., description="User identifier.")
+    profile_id: int | None = Field(None, description="Role profile identifier.")
+    full_name: str = Field(..., description="User full name.")
+    phone: str = Field(..., description="User phone.")
+    email: str | None = Field(None, description="User email.")
+    telegram_id: str | None = Field(None, description="Linked Telegram identifier.")
+    role: UserRole = Field(..., description="User role.")
+    is_active: bool = Field(..., description="Whether the user is active.")
+    vehicle_info: str | None = Field(None, description="Courier vehicle info.")

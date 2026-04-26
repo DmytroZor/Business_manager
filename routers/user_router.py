@@ -1,20 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from jose import JWTError
+from sqlalchemy.orm import selectinload
+
 from core.db import get_db
 from core.models import User
-from manage.docs.api_docs import USER_DOCS, ERROR_RESPONSES
-from manage.schemas.auth_schema import UserCreate, UserOut, Token, UserRegisterResponse, phone_number_normalizer
-from manage.services.auth_service import create_user, create_access_token, decode_token, verify_password
-from sqlalchemy.orm import selectinload
+from manage.docs.api_docs import ERROR_RESPONSES, USER_DOCS
+from manage.schemas.auth_schema import (
+    AdminUserSummaryOut,
+    TelegramLinkPayload,
+    Token,
+    UserCreate,
+    UserOut,
+    UserRegisterResponse,
+    phone_number_normalizer,
+)
+from core.models import UserRole
+from manage.services.auth_service import (
+    create_access_token,
+    create_user,
+    decode_token,
+    link_telegram_account,
+    verify_password,
+)
+
 router = APIRouter(prefix="/users", tags=["Users"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
-
     try:
         payload = decode_token(token)
         user_id_str: str | None = payload.get("sub")
@@ -113,8 +129,79 @@ async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db
             full_name=user.full_name,
             phone=user.phone,
             email=user.email,
+            telegram_id=user.telegram_id,
             role=user.role,
         ),
         access_token=token,
         token_type="bearer",
     )
+
+
+@router.post(
+    "/me/telegram-link",
+    response_model=UserOut,
+    summary=USER_DOCS["telegram_link"]["summary"],
+    description=USER_DOCS["telegram_link"]["description"],
+    responses={
+        401: ERROR_RESPONSES["unauthorized"],
+        409: ERROR_RESPONSES["conflict"],
+        422: ERROR_RESPONSES["validation"],
+        500: ERROR_RESPONSES["internal"],
+    },
+)
+async def connect_telegram_account(
+    payload: TelegramLinkPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    user = await link_telegram_account(db, current_user.id, payload.telegram_id)
+    return UserOut(
+        id=user.id,
+        full_name=user.full_name,
+        phone=user.phone,
+        email=user.email,
+        telegram_id=user.telegram_id,
+        role=user.role,
+    )
+
+
+@router.get(
+    "/admin/couriers",
+    response_model=list[AdminUserSummaryOut],
+    summary="Admin: list couriers",
+    description="Returns couriers available for assignment in admin tools.",
+)
+async def admin_list_couriers(
+    active_only: bool = Query(default=True),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    stmt = (
+        select(User)
+        .options(selectinload(User.courier_profile))
+        .where(User.role == UserRole.COURIER)
+        .order_by(User.full_name.asc())
+    )
+    if active_only:
+        stmt = stmt.where(User.is_active.is_(True))
+
+    result = await db.execute(stmt)
+    couriers = result.scalars().all()
+
+    return [
+        AdminUserSummaryOut(
+            user_id=user.id,
+            profile_id=user.courier_profile.id if user.courier_profile else None,
+            full_name=user.full_name,
+            phone=user.phone,
+            email=user.email,
+            telegram_id=user.telegram_id,
+            role=user.role,
+            is_active=user.is_active,
+            vehicle_info=user.courier_profile.vehicle_info if user.courier_profile else None,
+        )
+        for user in couriers
+    ]

@@ -43,10 +43,11 @@ async def create_review(
     is_delivered = order.status == OrderStatus.DELIVERED or any(
         delivery.status == DeliveryStatus.DELIVERED for delivery in order.deliveries
     )
-    if not is_delivered:
+    is_cancelled = order.status == OrderStatus.CANCELLED
+    if not (is_delivered or is_cancelled):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Review is allowed only after delivery is completed",
+            detail="Review is allowed only after delivery is completed or the order is cancelled",
         )
 
     if payload.product_id is not None:

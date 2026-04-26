@@ -22,8 +22,8 @@ def _get_customer_profile_id(current_user: User) -> int:
     "/orders/{order_id}",
     response_model=ReviewOut,
     status_code=status.HTTP_201_CREATED,
-    summary="Create review for delivered order",
-    description="Customer leaves a review after the order has been delivered.",
+    summary="Create review for delivered or cancelled order",
+    description="Customer leaves a review after the order has been delivered or cancelled.",
 )
 async def create_order_review(
     order_id: int,

@@ -69,6 +69,7 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
         phone=user_data.phone_number,
+        telegram_id=user_data.telegram_id,
         role=user_data.user_role,
     )
     db.add(user)
@@ -106,5 +107,44 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
 
     if not user:
         raise HTTPException(status_code=500, detail="User was created but could not be reloaded")
+
+    return user
+
+
+async def link_telegram_account(db: AsyncSession, user_id: int, telegram_id: str) -> User:
+    normalized_telegram_id = telegram_id.strip()
+    if not normalized_telegram_id:
+        raise HTTPException(status_code=400, detail="telegram_id cannot be empty")
+
+    existing_result = await db.execute(
+        select(User).where(User.telegram_id == normalized_telegram_id)
+    )
+    existing_user = existing_result.scalar_one_or_none()
+    if existing_user and existing_user.id != user_id:
+        raise HTTPException(status_code=409, detail="This telegram_id is already linked to another user")
+
+    result = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.customer_profile),
+            selectinload(User.courier_profile),
+        )
+        .where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.telegram_id = normalized_telegram_id
+
+    try:
+        await db.commit()
+        await db.refresh(user)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="This telegram_id is already linked to another user")
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Database error while linking telegram account")
 
     return user
