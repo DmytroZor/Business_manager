@@ -62,7 +62,7 @@ def reserve_product_quantity(product: Product, quantity: Decimal) -> None:
     if current_available < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ РІС–Р»СЊРЅРѕРіРѕ Р·Р°Р»РёС€РєСѓ РґР»СЏ С‚РѕРІР°СЂСѓ В«{product.name}В».",
+            detail=f"Недостатньо вільного залишку для товару «{product.name}».",
         )
     product.available_quantity = quantize_quantity(current_available - quantity)
     product.reserved_quantity = quantize_quantity(current_reserved + quantity)
@@ -71,23 +71,15 @@ def reserve_product_quantity(product: Product, quantity: Decimal) -> None:
 def release_reserved_quantity(product: Product, quantity: Decimal) -> None:
     current_available = Decimal(str(product.available_quantity or 0))
     current_reserved = Decimal(str(product.reserved_quantity or 0))
-    if current_reserved < quantity:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"РќРµ РІРґР°Р»РѕСЃСЏ РїРѕРІРµСЂРЅСѓС‚Рё СЂРµР·РµСЂРІ РґР»СЏ С‚РѕРІР°СЂСѓ В«{product.name}В»: РєС–Р»СЊРєС–СЃС‚СЊ Сѓ СЂРµР·РµСЂРІС– РЅРµ Р·Р±С–РіР°С”С‚СЊСЃСЏ.",
-        )
-    product.available_quantity = quantize_quantity(current_available + quantity)
-    product.reserved_quantity = quantize_quantity(current_reserved - quantity)
+    take = min(current_reserved, quantity)
+    product.available_quantity = quantize_quantity(current_available + take)
+    product.reserved_quantity = quantize_quantity(current_reserved - take)
 
 
 def consume_reserved_quantity(product: Product, quantity: Decimal) -> None:
     current_reserved = Decimal(str(product.reserved_quantity or 0))
-    if current_reserved < quantity:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"РќРµ РІРґР°Р»РѕСЃСЏ СЃРїРёСЃР°С‚Рё СЂРµР·РµСЂРІ РґР»СЏ С‚РѕРІР°СЂСѓ В«{product.name}В»: РєС–Р»СЊРєС–СЃС‚СЊ Сѓ СЂРµР·РµСЂРІС– РЅРµ Р·Р±С–РіР°С”С‚СЊСЃСЏ.",
-        )
-    product.reserved_quantity = quantize_quantity(current_reserved - quantity)
+    take = min(current_reserved, quantity)
+    product.reserved_quantity = quantize_quantity(current_reserved - take)
 
 
 def restore_picked_up_quantity(product: Product, quantity: Decimal) -> None:
@@ -178,14 +170,14 @@ async def _create_product_from_document_row(row: ProductStockDocumentRow) -> Pro
     if sale_price is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Р”Р»СЏ РЅРѕРІРѕРіРѕ С‚РѕРІР°СЂСѓ В«{row.name}В» РїРѕС‚СЂС–Р±РЅРѕ РІРєР°Р·Р°С‚Рё С†С–РЅСѓ РїСЂРѕРґР°Р¶Сѓ Р°Р±Рѕ Р·Р°РєСѓРїС–РІР»С–.",
+            detail=f"Для нового товару «{row.name}» потрібно вказати ціну продажу або закупівлі.",
         )
 
     quantity_value = quantize_quantity(row.quantity_value)
     if quantity_value < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"РќРµ РјРѕР¶РЅР° Р·РјРµРЅС€РёС‚Рё Р·Р°Р»РёС€РѕРє РґР»СЏ С‚РѕРІР°СЂСѓ В«{row.name}В», СЏРєРѕРіРѕ С‰Рµ РЅРµРјР°С” РІ Р±Р°Р·С–.",
+            detail=f"Не можна зменшити залишок для товару «{row.name}», якого ще немає в базі.",
         )
 
     product = Product(
@@ -234,7 +226,7 @@ async def ensure_opening_batch_for_product(db: AsyncSession, product: Product) -
             purchase_unit_price=product.last_purchase_price or product.base_unit_price,
             original_quantity=missing_quantity,
             available_quantity=missing_quantity,
-            note="РђРІС‚РѕРјР°С‚РёС‡РЅРѕ СЃС‚РІРѕСЂРµРЅРёР№ РїРѕС‡Р°С‚РєРѕРІРёР№ РїР°СЂС‚С–Р№РЅРёР№ Р·Р°Р»РёС€РѕРє.",
+            note="Автоматично створений початковий партійний залишок.",
         )
         db.add(opening_batch)
         await db.flush()
@@ -337,7 +329,7 @@ async def _decrease_batches(
         if not batches:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Р”Р»СЏ С‚РѕРІР°СЂСѓ В«{product.name}В» РЅРµ Р·РЅР°Р№РґРµРЅРѕ РїР°СЂС‚С–СЋ, Р· СЏРєРѕС— РјРѕР¶РЅР° СЃРїРёСЃР°С‚Рё Р·Р°Р»РёС€РѕРє.",
+                detail=f"Для товару «{product.name}» не знайдено партію, з якої можна списати залишок.",
             )
 
     remaining = quantity_to_remove
@@ -354,7 +346,7 @@ async def _decrease_batches(
     if remaining > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"РќРµРґРѕСЃС‚Р°С‚РЅСЊРѕ РїР°СЂС‚С–Р№РЅРѕРіРѕ Р·Р°Р»РёС€РєСѓ, С‰РѕР± СЃРєРѕСЂРёРіСѓРІР°С‚Рё С‚РѕРІР°СЂ В«{product.name}В».",
+            detail=f"Недостатньо партійного залишку, щоб скоригувати товар «{product.name}».",
         )
 
 
@@ -442,8 +434,8 @@ async def apply_stock_document(
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=(
-                            f"Р†РЅРІРµРЅС‚Р°СЂРёР·Р°С†С–СЏ РґР»СЏ С‚РѕРІР°СЂСѓ В«{product.name}В» РјРµРЅС€Р° Р·Р° РІР¶Рµ Р·Р°СЂРµР·РµСЂРІРѕРІР°РЅРёР№ Р·Р°Р»РёС€РѕРє. "
-                            "РЎРїРѕС‡Р°С‚РєСѓ РїРѕС‚СЂС–Р±РЅРѕ РІС–РґРІР°РЅС‚Р°Р¶РёС‚Рё Р°Р±Рѕ Р·РЅСЏС‚Рё СЂРµР·РµСЂРІ."
+                            f"Інвентаризація для товару «{product.name}» менша за вже зарезервований залишок. "
+                            "Спочатку потрібно відвантажити або зняти резерв."
                         ),
                     )
                 delta = quantize_quantity(target_total - current_on_hand)
@@ -454,7 +446,7 @@ async def apply_stock_document(
                 if new_available < 0:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Р’С–Р»СЊРЅРёР№ Р·Р°Р»РёС€РѕРє РґР»СЏ С‚РѕРІР°СЂСѓ В«{product.name}В» РЅРµ РјРѕР¶Рµ Р±СѓС‚Рё РјРµРЅС€РёРј Р·Р° РЅСѓР»СЊ.",
+                        detail=f"Вільний залишок для товару «{product.name}» не може бути меншим за нуль.",
                     )
                 product.available_quantity = new_available
 
