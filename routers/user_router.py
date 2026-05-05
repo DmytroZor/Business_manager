@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -89,7 +89,7 @@ async def login(
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(password, user.hashed_password):
+    if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email/phone or password")
 
     token = create_access_token({"sub": str(user.id)})
@@ -109,15 +109,15 @@ async def login(
     },
 )
 async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    existing_user = await db.execute(
-        select(User).where(
-            (User.phone == user_data.phone_number) | (User.email == user_data.email)
-        )
-    )
+    filters = [User.phone == user_data.phone_number]
+    if user_data.email:
+        filters.append(User.email == user_data.email)
+
+    existing_user = await db.execute(select(User).where(or_(*filters)))
     if existing_user.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email or phone already exists",
+            detail="User with this phone or email already exists",
         )
 
     user = await create_user(db, user_data)

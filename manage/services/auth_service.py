@@ -7,10 +7,10 @@ from core.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from core.models import User
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from core.models import UserRole, Customer, Courier
 from fastapi import HTTPException
-from manage.schemas.auth_schema import PhoneNumber, UserCreate
+from manage.schemas.auth_schema import AdminCourierCreate, PhoneNumber, UserCreate
 from passlib.context import CryptContext
 
 # auth_service
@@ -100,13 +100,56 @@ async def create_user(db: AsyncSession, user_data: UserCreate):
 
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=400, detail="User with this email or phone already exists")
+        raise HTTPException(status_code=400, detail="User with this phone, email, or telegram id already exists")
     except SQLAlchemyError:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Database error while creating user")
 
     if not user:
         raise HTTPException(status_code=500, detail="User was created but could not be reloaded")
+
+    return user
+
+
+async def create_courier_user_by_admin(db: AsyncSession, payload: AdminCourierCreate) -> User:
+    filters = [User.phone == payload.phone_number]
+    if payload.email:
+        filters.append(User.email == payload.email)
+
+    existing_result = await db.execute(select(User).where(or_(*filters)))
+    if existing_result.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="Courier with this phone or email already exists")
+
+    user = User(
+        full_name=payload.full_name,
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+        phone=payload.phone_number,
+        role=UserRole.COURIER,
+        is_active=True,
+    )
+    db.add(user)
+
+    try:
+        await db.flush()
+        courier = Courier(user_id=user.id, vehicle_info=payload.vehicle_info)
+        db.add(courier)
+        await db.commit()
+        result = await db.execute(
+            select(User)
+            .options(selectinload(User.courier_profile))
+            .where(User.id == user.id)
+        )
+        user = result.scalar_one_or_none()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Courier with this phone, email, or telegram id already exists")
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Database error while creating courier account")
+
+    if not user:
+        raise HTTPException(status_code=500, detail="Courier account was created but could not be reloaded")
 
     return user
 

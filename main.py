@@ -3,17 +3,21 @@ import time
 
 from datetime import datetime, timezone
 from http import HTTPStatus
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from core.db import engine
 from core import models
+from core.settings import settings
+from manage.admin import ADMIN_STATIC_DIR, router as admin_router
 
 from routers import (
     product_router,
@@ -22,6 +26,7 @@ from routers import (
     order_router,
     delivery_router,
     review_router,
+    internal_notification_router,
 )
 
 from manage.schemas.error_schema import ErrorResponse, ValidationErrorResponse
@@ -123,6 +128,9 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+if Path(ADMIN_STATIC_DIR).exists():
+    app.mount("/admin/static", StaticFiles(directory=ADMIN_STATIC_DIR), name="admin_static")
+
 
 async def init_models():
     async with engine.begin() as conn:
@@ -132,8 +140,11 @@ async def init_models():
 @app.on_event("startup")
 async def on_startup():
     logger.info("Application startup")
-    await init_models()
-    logger.info("Database initialized")
+    if settings.auto_create_tables:
+        await init_models()
+        logger.info("Database schema created via startup hook")
+    else:
+        logger.info("Automatic create_all() is disabled; expecting Alembic-managed schema")
 
 
 @app.get("/")
@@ -213,9 +224,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # ================= ROUTERS =================
 
+app.include_router(admin_router)
 app.include_router(product_router.router)
 app.include_router(user_router.router)
 app.include_router(address_router.router)
 app.include_router(order_router.router)
 app.include_router(delivery_router.router)
 app.include_router(review_router.router)
+app.include_router(internal_notification_router.router)

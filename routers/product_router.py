@@ -1,10 +1,20 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from core.db import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
-from manage.docs.api_docs import PRODUCT_DOCS, ERROR_RESPONSES
-from manage.schemas.product_schema import ProductOut, ProductCreate, ProductUpdate, SortField, SortOrder, ActiveStatus
-from manage.services import product_service
 from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.db import get_db
+from manage.docs.api_docs import ERROR_RESPONSES, PRODUCT_DOCS
+from manage.schemas.product_schema import (
+    ActiveStatus,
+    ProductCreate,
+    ProductOut,
+    ProductUpdate,
+    SortField,
+    SortOrder,
+    StockStatus,
+)
+from manage.services import product_service
 from routers.user_router import get_current_user
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -40,17 +50,26 @@ async def get_product_by_id(product_id: int, db: AsyncSession = Depends(get_db))
         500: ERROR_RESPONSES["internal"],
     },
 )
-async def get_all_products(sort_order: SortOrder = SortOrder.asc,
-                           limit: int = Query(default=10, ge=1, le=100),
-                           offset: int = Query(default=0, ge=0),
-                           sort_field: SortField = SortField.name,
-                           active_flag: ActiveStatus = ActiveStatus.active_products,
-                           db: AsyncSession = Depends(get_db)):
-    products = await product_service.get_all_products(db, sort_field=sort_field,
-                                                      active_status=active_flag,
-                                                      sort_order=sort_order,
-                                                      offset=offset,
-                                                      limit=limit)
+async def get_all_products(
+    sort_order: SortOrder = SortOrder.asc,
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    sort_field: SortField = SortField.name,
+    active_flag: ActiveStatus = ActiveStatus.active_products,
+    stock_filter: StockStatus = StockStatus.all_products,
+    search: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    products = await product_service.get_all_products(
+        db,
+        sort_field=sort_field,
+        active_status=active_flag,
+        sort_order=sort_order,
+        offset=offset,
+        limit=limit,
+        search=search,
+        stock_status=stock_filter,
+    )
     return products
 
 
@@ -66,9 +85,12 @@ async def get_all_products(sort_order: SortOrder = SortOrder.asc,
         500: ERROR_RESPONSES["internal"],
     },
 )
-async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    created = await product_service.create_product(db, product_data=product)
-    return created
+async def create_product(
+    product: ProductCreate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    return await product_service.create_product(db, product_data=product)
 
 
 @router.put(
@@ -83,8 +105,13 @@ async def create_product(product: ProductCreate, db: AsyncSession = Depends(get_
         500: ERROR_RESPONSES["internal"],
     },
 )
-async def update_product(product_id: int, product: ProductUpdate, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    update = await product_service.product_update_by_id(db, product_id, product)
-    if not update:
+async def update_product(
+    product_id: int,
+    product: ProductUpdate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    updated = await product_service.product_update_by_id(db, product_id, product)
+    if not updated:
         raise HTTPException(status_code=404, detail="Product not found")
-    return update
+    return updated

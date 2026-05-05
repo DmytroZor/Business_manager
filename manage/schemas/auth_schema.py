@@ -28,7 +28,7 @@ class PhoneNumber(BaseModel):
 
 class UserCreate(BaseModel):
     full_name: str = Field(..., min_length=3, description="User full name.")
-    email: EmailStr = Field(..., description="Unique user email address.")
+    email: EmailStr | None = Field(default=None, description="Optional unique user email address.")
     password: str = Field(..., min_length=6, description="User password. Minimum 6 characters.")
     phone_number: str = Field(..., description="User phone number. Will be normalized to +380 format.")
     user_role: UserRole = Field(..., description="Role assigned to the new user.")
@@ -60,6 +60,19 @@ class UserRegisterResponse(BaseModel):
 
 class CourierCreate(BaseModel):
     vehicle_info: str = Field(min_length=8, max_length=8, description="Courier vehicle information code.")
+
+
+class AdminCourierCreate(BaseModel):
+    full_name: str = Field(..., min_length=3, description="Courier full name.")
+    password: str = Field(..., min_length=6, description="Courier password.")
+    phone_number: str = Field(..., description="Courier phone number.")
+    vehicle_info: str | None = Field(default=None, max_length=200, description="Optional courier vehicle info.")
+    email: EmailStr | None = Field(default=None, description="Optional courier email.")
+
+    @field_validator("phone_number")
+    @classmethod
+    def normalize_phone_number(cls, value: str) -> str:
+        return phone_number_normalizer(value)
 
 
 class Token(BaseModel):

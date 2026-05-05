@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Admin IA</p>
+        <h2>Orders and dispatch</h2>
+        <p class="page-copy">Review incoming orders, assign couriers, and handle problem cases without Telegram FSM friction.</p>
+    </div>
+</section>
+
+<section class="stats-grid">
+    <article class="stat-card">
+        <span class="stat-label">Open</span>
+        <strong>{{ stats.get('open', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Placed</span>
+        <strong>{{ stats.get('placed', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Preparing</span>
+        <strong>{{ stats.get('preparing', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Out for delivery</span>
+        <strong>{{ stats.get('out_for_delivery', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Delivered</span>
+        <strong>{{ stats.get('delivered', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Cancelled</span>
+        <strong>{{ stats.get('cancelled', 0) }}</strong>
+    </article>
+</section>
+
+<form
+    id="orders-filters"
+    class="panel toolbar"
+    method="get"
+    action="{{ url_for('admin_orders_dashboard') }}"
+>
+    <label class="field grow">
+        <span>Search</span>
+        <input
+            id="orders-search"
+            type="text"
+            name="search"
+            value="{{ search }}"
+            placeholder="Order ID, phone, name, email, street"
+        >
+    </label>
+
+    <label class="field">
+        <span>Status</span>
+        <select name="status_filter">
+            <option value="">All statuses</option>
+            {% for value, label in order_status_options %}
+                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label class="field">
+        <span>Queue view</span>
+        <select name="queue_filter">
+            {% for value, label in order_queue_filter_options %}
+                <option value="{{ value }}" {% if queue_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label class="field">
+        <span>Placed on</span>
+        <select name="date_filter">
+            {% for value, label in order_date_filter_options %}
+                <option value="{{ value }}" {% if date_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <input type="hidden" id="selected-order-id" name="selected_order_id" value="{{ selected_order_id or '' }}">
+    <input type="hidden" id="orders-page" name="page" value="{{ page }}">
+
+    <div class="toolbar-actions">
+        <button class="primary-button" type="submit">Apply</button>
+        <a class="secondary-button" href="{{ url_for('admin_orders_dashboard') }}">Reset</a>
+    </div>
+</form>
+
+<section class="workspace-grid">
+    <div class="panel list-panel">
+        <div class="panel-heading">
+            <h3>Queue</h3>
+            <p>
+                Showing {{ orders|length }} of {{ total_orders }} matching orders.
+                Queue page {{ page }} of {{ total_pages }}.
+            </p>
+        </div>
+
+        <div
+            id="orders-list"
+            hx-get="{{ url_for('admin_orders_table') }}"
+            hx-trigger="refresh from:body"
+            hx-include="#orders-filters"
+        >
+            {% include "partials/orders_table.html" %}
+        </div>
+    </div>
+
+    <div class="panel detail-panel" id="order-detail">
+        {% if order %}
+            {% include "partials/order_detail.html" %}
+        {% else %}
+            {% include "partials/order_empty.html" %}
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

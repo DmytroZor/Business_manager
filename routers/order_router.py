@@ -7,6 +7,7 @@ from core.db import get_db
 from core.models import OrderStatus, User, UserRole
 from manage.docs.api_docs import ORDER_DOCS, ERROR_RESPONSES
 from manage.schemas.order_schema import (
+    AdminOrderItemsUpdate,
     AdminOrderOut,
     AdminPhoneOrderCreate,
     OrderCancelPayload,
@@ -98,6 +99,8 @@ async def admin_get_orders(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     status_filter: OrderStatus | None = Query(default=None),
+    queue_filter: str | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -107,6 +110,8 @@ async def admin_get_orders(
         limit=limit,
         offset=offset,
         status_filter=status_filter,
+        queue_filter=queue_filter,
+        search=search,
     )
     return [AdminOrderOut.model_validate(order_service.build_admin_order_payload(order)) for order in orders]
 
@@ -141,7 +146,13 @@ async def admin_create_phone_order(
     current_user: User = Depends(get_current_user),
 ):
     _ensure_admin(current_user)
-    order = await order_service.create_phone_order_by_admin(db, payload)
+    order = await order_service.create_phone_order_by_admin(
+        db,
+        payload,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        source="admin_api",
+    )
     return AdminOrderOut.model_validate(order_service.build_admin_order_payload(order))
 
 
@@ -159,5 +170,37 @@ async def admin_cancel_order(
     current_user: User = Depends(get_current_user),
 ):
     _ensure_admin(current_user)
-    order = await order_service.cancel_order_by_admin(db, order_id, payload)
+    order = await order_service.cancel_order_by_admin(
+        db,
+        order_id,
+        payload,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        source="admin_api",
+    )
+    return AdminOrderOut.model_validate(order_service.build_admin_order_payload(order))
+
+
+@router.patch(
+    "/admin/orders/{order_id}/items",
+    response_model=AdminOrderOut,
+    status_code=200,
+    summary="Admin: update order item quantities",
+    description="Allows admins to correct item quantities in an order before delivery starts.",
+)
+async def admin_update_order_items(
+    order_id: int,
+    payload: AdminOrderItemsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _ensure_admin(current_user)
+    order = await order_service.update_order_items_by_admin(
+        db,
+        order_id,
+        payload,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        source="admin_api",
+    )
     return AdminOrderOut.model_validate(order_service.build_admin_order_payload(order))

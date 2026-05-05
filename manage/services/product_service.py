@@ -1,29 +1,95 @@
-from decimal import InvalidOperation, Decimal
-from fastapi import HTTPException
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
-from manage.schemas.product_schema import ProductCreate, ProductUpdate, SortOrder, SortField, ActiveStatus
-from core.models import Product
-from sqlalchemy import select
-from additional import sku_generator
+from __future__ import annotations
 
-#product_service
+from decimal import Decimal
+from typing import Sequence
+
+from fastapi import HTTPException, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from additional import sku_generator
+from core.models import Product
+from manage.schemas.product_schema import (
+    ActiveStatus,
+    ProductCreate,
+    ProductStockDocumentApply,
+    ProductUpdate,
+    SortField,
+    SortOrder,
+    StockStatus,
+)
+from manage.services import inventory_service
+
+
+LOW_STOCK_THRESHOLD = Decimal("5.000")
+
+
+def _base_product_query():
+    return select(Product)
+
+
+def _apply_active_filter(stmt, active_status: ActiveStatus):
+    if active_status == ActiveStatus.active_products:
+        return stmt.where(Product.is_active.is_(True))
+    if active_status == ActiveStatus.inactive_products:
+        return stmt.where(Product.is_active.is_(False))
+    return stmt
+
+
+def _apply_stock_filter(stmt, stock_status: StockStatus):
+    if stock_status == StockStatus.in_stock:
+        return stmt.where(Product.available_quantity > 0)
+    if stock_status == StockStatus.low_stock:
+        return stmt.where(and_(Product.available_quantity > 0, Product.available_quantity <= LOW_STOCK_THRESHOLD))
+    if stock_status == StockStatus.out_of_stock:
+        return stmt.where(Product.available_quantity <= 0)
+    return stmt
+
+
+def _apply_search(stmt, search: str | None):
+    if not search:
+        return stmt
+    term = search.strip()
+    if not term:
+        return stmt
+    like_term = f"%{term}%"
+    return stmt.where(
+        Product.name.ilike(like_term)
+        | Product.sku.ilike(like_term)
+        | Product.description.ilike(like_term)
+    )
+
 
 async def create_product(db: AsyncSession, product_data: ProductCreate):
-    product = Product(name=product_data.name,
-                      description=product_data.description,
-                      base_unit_price=product_data.base_unit_price,
-                      unit=product_data.unit,
-                      is_active=product_data.is_active,
-                      sku=sku_generator.generate_sku())
+    product = Product(
+        name=product_data.name,
+        description=product_data.description,
+        image_url=product_data.image_url,
+        base_unit_price=product_data.base_unit_price,
+        last_purchase_price=None,
+        unit=product_data.unit,
+        available_quantity=product_data.available_quantity,
+        reserved_quantity=Decimal("0.000"),
+        is_active=product_data.is_active,
+        sku=sku_generator.generate_sku(name=product_data.name, unit=product_data.unit),
+    )
     db.add(product)
     try:
+        await db.flush()
+        await inventory_service.ensure_opening_batch_for_product(db, product)
         await db.commit()
         await db.refresh(product)
         return product
-    except SQLAlchemyError:
+    except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(status_code=500, detail="Database error while creating product")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Product with this SKU already exists") from exc
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while creating product",
+        ) from exc
 
 
 async def get_product_by_id(db: AsyncSession, product_id: int):
@@ -37,90 +103,29 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
         return None
 
     update_data = product_data.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid fields provided for update")
 
-    # Підготовка дозволених полів і non-nullable (щоб не перезаписати id і т.д.)
-    allowed_fields = {c.name for c in Product.__table__.columns}  # наприклад: {'id','name','base_unit_price',...}
-    # не дозволяємо міняти PK або created_at (за бажанням)
-    prohibited = {"id", "created_at"}
-    allowed_fields -= prohibited
-
-    # Які поля у таблиці не допускають NULL
-    non_nullable = {c.name for c in Product.__table__.columns if not c.nullable}
-    # якщо потрібно дозволити None для деяких полів, видали їх з non_nullable
-
-    # 3. фільтрація і перевірки
-    cleaned: dict = {}
-    for k, v in update_data.items():
-        if k not in allowed_fields:
-            raise HTTPException(status_code=422, detail=f"Field '{k}' cannot be updated")
-
-        # Якщо поле не nullable і передано explicit null -> ігноруємо або кидаємо помилку
-        if v is None and k in non_nullable:
-            raise HTTPException(status_code=422, detail=f"Field '{k}' cannot be null")
-
-        # спеціальна обробка для base_unit_price (Decimal)
-        if k == "base_unit_price" and v is not None:
-            # Якщо прийшло як рядок "100грн" чи "100.0" — чистимо і конвертуємо
-            if isinstance(v, str):
-                cleaned_str = "".join(ch for ch in v if ch.isdigit() or ch == ".")
-                if cleaned_str == "":
-                    raise HTTPException(status_code=422, detail="base_unit_price has invalid format")
-                try:
-                    dec = Decimal(cleaned_str)
-                except InvalidOperation:
-                    raise HTTPException(status_code=422, detail="base_unit_price has invalid format")
-            else:
-                # якщо це число (int/float/Decimal)
-                try:
-                    dec = Decimal(str(v))
-                except InvalidOperation:
-                    raise HTTPException(status_code=422, detail="base_unit_price has invalid format")
-            # бізнес-правило: ціна > 0
-            if dec <= 0:
-                raise HTTPException(status_code=422, detail="base_unit_price must be greater than 0")
-            cleaned[k] = dec
-            continue
-
-        # приклад: trim name та не пустий рядок
-        if k == "name" and v is not None:
-            v = v.strip()
-            if v == "":
-                raise HTTPException(status_code=422, detail="name cannot be empty")
-            cleaned[k] = v
-            continue
-
-        # приклад: unit — укоротити/перевірити довжину або перелік
-        if k == "unit" and v is not None:
-            v = v.strip()
-            if len(v) == 0 or len(v) > 20:
-                raise HTTPException(status_code=422, detail="unit must be between 1 and 20 characters")
-
-            # if v not in allowed_units: continue
-            cleaned[k] = v
-            continue
-
-        # is_active — привести до bool
-        if k == "is_active" and v is not None:
-            cleaned[k] = bool(v)
-            continue
-
-        # дефолтна дія: якщо прийшло поле яке можна просто поставити
-        cleaned[k] = v
-
-    # 4. застосувати зміни
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="No valid fields provided for update")
-
-    for field, value in cleaned.items():
+    for field, value in update_data.items():
         setattr(product, field, value)
 
-    # 5. commit з rollback у випадку помилки
     try:
+        await db.flush()
+        await inventory_service.ensure_opening_batch_for_product(db, product)
         await db.commit()
         await db.refresh(product)
-    except SQLAlchemyError:
+    except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(status_code=500, detail="Database error while updating product")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Product update violates a unique constraint",
+        ) from exc
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while updating product",
+        ) from exc
 
     return product
 
@@ -133,32 +138,53 @@ async def product_delete_by_id(db: AsyncSession, product_id: int):
     try:
         await db.commit()
         return True
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         await db.rollback()
-        raise HTTPException(status_code=500, detail="Database error while deleting product")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while deleting product",
+        ) from exc
 
 
-async def get_all_products(db: AsyncSession,
-                           sort_field: SortField,
-                           active_status: ActiveStatus,
-                           sort_order: SortOrder,
-                           offset: int = 0,
-                           limit: int = 10,
-                           ):
-    if active_status == ActiveStatus.all_products:
-        products = select(Product)
-    elif active_status == ActiveStatus.active_products:
-        products = select(Product).where(Product.is_active.is_(True))
-    else:
-        products = select(Product).where(Product.is_active.is_(False))
+async def apply_stock_document(
+    db: AsyncSession,
+    payload: ProductStockDocumentApply,
+    *,
+    actor_user_id: int | None = None,
+):
+    return await inventory_service.apply_stock_document(db, payload, actor_user_id=actor_user_id)
 
-    sort_col = getattr(Product, sort_field)
 
+async def list_recent_stock_documents(db: AsyncSession, *, limit: int = 10):
+    return await inventory_service.list_recent_stock_documents(db, limit=limit)
+
+
+async def get_product_batches(db: AsyncSession, product_id: int, *, limit: int = 20):
+    return await inventory_service.get_product_batches(db, product_id, limit=limit)
+
+
+async def get_all_products(
+    db: AsyncSession,
+    sort_field: SortField,
+    active_status: ActiveStatus,
+    sort_order: SortOrder,
+    offset: int = 0,
+    limit: int = 10,
+    *,
+    search: str | None = None,
+    stock_status: StockStatus = StockStatus.all_products,
+) -> Sequence[Product]:
+    stmt = _base_product_query()
+    stmt = _apply_active_filter(stmt, active_status)
+    stmt = _apply_stock_filter(stmt, stock_status)
+    stmt = _apply_search(stmt, search)
+
+    sort_col = getattr(Product, sort_field.value)
     if sort_order == SortOrder.desc:
-        products = products.order_by(sort_col.desc())
+        stmt = stmt.order_by(sort_col.desc(), Product.id.desc())
     else:
-        products = products.order_by(sort_col.asc())
+        stmt = stmt.order_by(sort_col.asc(), Product.id.asc())
 
-    products = products.offset(offset).limit(limit)
-    result = await db.execute(products)
+    stmt = stmt.offset(offset).limit(limit)
+    result = await db.execute(stmt)
     return result.scalars().all()

@@ -1,0 +1,301 @@
+{% if error %}
+    <div class="banner danger">{{ error }}</div>
+{% endif %}
+{% if message %}
+    <div class="banner success">{{ message }}</div>
+{% endif %}
+
+<div class="detail-stack">
+    <section class="detail-hero">
+        <div>
+            <p class="eyebrow">Order detail</p>
+            <h3>Order #{{ order.id }}</h3>
+            <p class="page-copy">Placed {{ order.placed_at|datetime }}</p>
+        </div>
+        <div class="detail-summary">
+            <span class="status-pill">{{ order.status|order_status }}</span>
+            <strong>{{ order.total_amount|money }}</strong>
+        </div>
+    </section>
+
+    <section class="detail-grid">
+        <article class="panel">
+            <div class="panel-heading">
+                <h4>Customer</h4>
+            </div>
+            <dl class="meta-grid">
+                <div>
+                    <dt>Name</dt>
+                    <dd>{{ order.customer.full_name if order.customer else 'Unknown customer' }}</dd>
+                </div>
+                <div>
+                    <dt>Phone</dt>
+                    <dd>{{ order.customer.phone if order.customer else '-' }}</dd>
+                </div>
+                <div>
+                    <dt>Email</dt>
+                    <dd>{{ order.customer.email if order.customer and order.customer.email else '-' }}</dd>
+                </div>
+            </dl>
+        </article>
+
+        <article class="panel">
+            <div class="panel-heading">
+                <h4>Delivery address</h4>
+            </div>
+            {% if order.delivery_address %}
+                <dl class="meta-grid">
+                    <div>
+                        <dt>Street</dt>
+                        <dd>{{ order.delivery_address.street }}</dd>
+                    </div>
+                    <div>
+                        <dt>Building</dt>
+                        <dd>{{ order.delivery_address.building }}</dd>
+                    </div>
+                    <div>
+                        <dt>Apartment</dt>
+                        <dd>{{ order.delivery_address.apartment or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Notes</dt>
+                        <dd>{{ order.delivery_address.notes or '-' }}</dd>
+                    </div>
+                </dl>
+            {% else %}
+                <p class="muted-copy">No delivery address available.</p>
+            {% endif %}
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h4>Items</h4>
+        </div>
+        <form
+            class="stack-form"
+            method="post"
+            action="{{ url_for('admin_update_order_items', order_id=order.id) }}"
+            hx-post="{{ url_for('admin_update_order_items', order_id=order.id) }}"
+            hx-target="#order-detail"
+            hx-swap="innerHTML"
+        >
+            <input type="hidden" name="search" value="{{ search }}">
+            <input type="hidden" name="status_filter" value="{{ status_filter }}">
+            <input type="hidden" name="queue_filter" value="{{ queue_filter }}">
+            <input type="hidden" name="date_filter" value="{{ date_filter }}">
+            <input type="hidden" name="page" value="{{ page }}">
+            <div class="table-shell">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Unit price</th>
+                        <th>Subtotal</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in order["items"] %}
+                        <tr>
+                            <td>
+                                <strong>{{ item.product_name }}</strong>
+                                {% if item.product_sku %}
+                                    <span class="table-subline">{{ item.product_sku }}</span>
+                                {% endif %}
+                                <input type="hidden" name="item_id" value="{{ item.id }}">
+                            </td>
+                            <td>
+                                {% if can_edit_order_items(order) %}
+                                    <input type="text" name="quantity" value="{{ item.quantity|quantity }}">
+                                    <span class="table-subline">{{ item.unit }}</span>
+                                {% else %}
+                                    {{ item.quantity|quantity }} {{ item.unit }}
+                                {% endif %}
+                            </td>
+                            <td>{{ item.unit_price|money }}</td>
+                            <td>{{ item.subtotal|money }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if can_edit_order_items(order) %}
+                <div class="toolbar-actions">
+                    <button class="secondary-button" type="submit">Update item quantities</button>
+                </div>
+            {% endif %}
+        </form>
+        {% if order.note %}
+            <p class="note-block">{{ order.note }}</p>
+        {% endif %}
+    </section>
+
+    <section class="detail-grid">
+        <article class="panel">
+            <div class="panel-heading">
+                <h4>Delivery</h4>
+            </div>
+            {% if order.active_delivery %}
+                <dl class="meta-grid">
+                    <div>
+                        <dt>Status</dt>
+                        <dd>{{ order.active_delivery.status|delivery_status }}</dd>
+                    </div>
+                    <div>
+                        <dt>Fee</dt>
+                        <dd>{{ order.active_delivery.fee|money }}</dd>
+                    </div>
+                    <div>
+                        <dt>Courier</dt>
+                        <dd>
+                            {% if order.active_delivery.courier %}
+                                {{ order.active_delivery.courier.full_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Assigned at</dt>
+                        <dd>{{ order.active_delivery.assigned_at|datetime }}</dd>
+                    </div>
+                    <div>
+                        <dt>Picked up at</dt>
+                        <dd>{{ order.active_delivery.picked_up_at|datetime }}</dd>
+                    </div>
+                    <div>
+                        <dt>Delivered at</dt>
+                        <dd>{{ order.active_delivery.delivered_at|datetime }}</dd>
+                    </div>
+                    <div>
+                        <dt>Failure reason</dt>
+                        <dd>{{ order.active_delivery.failed_reason or '-' }}</dd>
+                    </div>
+                </dl>
+            {% else %}
+                <p class="muted-copy">No active delivery is attached to this order.</p>
+            {% endif %}
+        </article>
+
+        <article class="panel">
+            <div class="panel-heading">
+                <h4>Actions</h4>
+            </div>
+
+            {% if can_assign_order(order) %}
+                <form
+                    class="stack-form"
+                    method="post"
+                    action="{{ url_for('admin_assign_order', order_id=order.id) }}"
+                    hx-post="{{ url_for('admin_assign_order', order_id=order.id) }}"
+                    hx-target="#order-detail"
+                    hx-swap="innerHTML"
+                >
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="status_filter" value="{{ status_filter }}">
+                    <input type="hidden" name="queue_filter" value="{{ queue_filter }}">
+                    <input type="hidden" name="date_filter" value="{{ date_filter }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+                    <label class="field">
+                        <span>Assign courier</span>
+                        <select name="courier_id" required>
+                            <option value="">Select courier</option>
+                            {% for courier in couriers %}
+                                <option value="{{ courier.profile_id }}">
+                                    {{ courier.full_name }} · {{ courier.phone }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span>Delivery fee</span>
+                        <input type="text" name="fee" value="0.00">
+                    </label>
+                    <button class="primary-button" type="submit">Assign courier</button>
+                </form>
+            {% endif %}
+
+            {% if can_cancel_order(order) %}
+                <form
+                    class="stack-form danger-zone"
+                    method="post"
+                    action="{{ url_for('admin_cancel_order_web', order_id=order.id) }}"
+                    hx-post="{{ url_for('admin_cancel_order_web', order_id=order.id) }}"
+                    hx-target="#order-detail"
+                    hx-swap="innerHTML"
+                >
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="status_filter" value="{{ status_filter }}">
+                    <input type="hidden" name="queue_filter" value="{{ queue_filter }}">
+                    <input type="hidden" name="date_filter" value="{{ date_filter }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+                    <label class="field">
+                        <span>Cancellation reason</span>
+                        <select name="reason_code">
+                            <option value="">Select a reason</option>
+                            {% for value, label in order_cancellation_reason_options %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span>Manager note</span>
+                        <textarea name="reason_note" rows="3" placeholder="Optional extra details for the team"></textarea>
+                    </label>
+                    <button class="danger-button" type="submit">Cancel order</button>
+                </form>
+            {% endif %}
+
+            {% if not can_assign_order(order) and not can_cancel_order(order) %}
+                <p class="muted-copy">No admin actions are available for the current state of this order.</p>
+            {% endif %}
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h4>Status timeline</h4>
+        </div>
+        {% if order.events %}
+            <div class="order-list">
+                {% for event in order.events %}
+                    <article class="order-row">
+                        <div class="order-row-top">
+                            <strong>{{ event.created_at|datetime }}</strong>
+                            <span class="status-pill">{{ event.event_type|replace('_', ' ')|title }}</span>
+                        </div>
+                        <div class="order-row-body">
+                            <span>{{ event.source }}</span>
+                            <span>
+                                {% if event.actor_name %}
+                                    {{ event.actor_name }}
+                                {% elif event.actor_role %}
+                                    {{ event.actor_role }}
+                                {% else %}
+                                    System
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="order-row-foot">
+                            <span>
+                                {% if event.previous_order_status or event.new_order_status %}
+                                    Order: {{ event.previous_order_status|order_status if event.previous_order_status else '-' }} → {{ event.new_order_status|order_status if event.new_order_status else '-' }}
+                                {% elif event.previous_delivery_status or event.new_delivery_status %}
+                                    Delivery: {{ event.previous_delivery_status|delivery_status if event.previous_delivery_status else '-' }} → {{ event.new_delivery_status|delivery_status if event.new_delivery_status else '-' }}
+                                {% else %}
+                                    Event recorded
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% if event.message %}
+                            <p class="note-block">{{ event.message }}</p>
+                        {% endif %}
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="muted-copy">No order events have been recorded yet.</p>
+        {% endif %}
+    </section>
+</div>

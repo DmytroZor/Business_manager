@@ -23,7 +23,6 @@ async def test_register_login_create_address_and_order(integration_session_maker
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             register_payload = {
                 "full_name": "Integration Flow User",
-                "email": "flow.user@example.com",
                 "password": "1234567",
                 "phone_number": "+380501112233",
                 "user_role": "customer",
@@ -32,10 +31,11 @@ async def test_register_login_create_address_and_order(integration_session_maker
             register_response = await client.post("/users/register", json=register_payload)
             assert register_response.status_code == 201
             assert register_response.json()["user"]["telegram_id"] == "111222333"
+            assert register_response.json()["user"]["email"] is None
 
             login_response = await client.post(
                 "/users/login",
-                data={"username": "flow.user@example.com", "password": "1234567"},
+                data={"username": "+380501112233", "password": "1234567"},
             )
             assert login_response.status_code == 200
             token = login_response.json()["access_token"]

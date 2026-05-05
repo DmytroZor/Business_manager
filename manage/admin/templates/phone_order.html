@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Phone order desk</p>
+        <h2>Create a phone order</h2>
+        <p class="page-copy">Capture the customer, address, and items in one form instead of walking through Telegram messages. Orders can be placed today, while customer-facing delivery messaging explains that delivery runs the next day.</p>
+    </div>
+</section>
+
+<form method="post" action="{{ url_for('admin_phone_order_create') }}" class="stack-layout">
+    {% if error %}
+        <div class="banner danger">{{ error }}</div>
+    {% endif %}
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h3>Customer</h3>
+            <p>Used to link an existing customer or create a new one.</p>
+        </div>
+        <div class="form-grid two-columns">
+            <label class="field">
+                <span>Full name</span>
+                <input type="text" name="customer_full_name" value="{{ form_data.get('customer_full_name', '') }}" required>
+            </label>
+            <label class="field">
+                <span>Phone number</span>
+                <input type="text" name="customer_phone_number" value="{{ form_data.get('customer_phone_number', '') }}" placeholder="+380..." required>
+            </label>
+            <label class="field">
+                <span>Email</span>
+                <input type="email" name="customer_email" value="{{ form_data.get('customer_email', '') }}">
+            </label>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h3>Delivery address</h3>
+            <p>This address will be reused if the same customer and location already exist.</p>
+        </div>
+        <div class="form-grid two-columns">
+            <label class="field">
+                <span>Street</span>
+                <input type="text" name="street" value="{{ form_data.get('street', '') }}" required>
+            </label>
+            <label class="field">
+                <span>Building</span>
+                <input type="text" name="building" value="{{ form_data.get('building', '') }}" required>
+            </label>
+            <label class="field">
+                <span>Apartment / office</span>
+                <input type="text" name="apartment" value="{{ form_data.get('apartment', '') }}">
+            </label>
+            <label class="field field-full">
+                <span>Address notes</span>
+                <textarea name="address_notes" rows="3">{{ form_data.get('address_notes', '') }}</textarea>
+            </label>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h3>Items</h3>
+            <p>Add one or more products with quantity. Use decimal quantities if needed.</p>
+        </div>
+
+        <div id="phone-order-items" class="stack-layout compact">
+            {% for item in items %}
+                <div class="order-item-row">
+                    <label class="field grow">
+                        <span>Product</span>
+                        <select name="product_id" required>
+                            <option value="">Select product</option>
+                            {% for product in products %}
+                                <option
+                                    value="{{ product.id }}"
+                                    {% if item.product_id and item.product_id|int == product.id %}selected{% endif %}
+                                >
+                                    {{ product.name }} · {{ product.base_unit_price|money }} / {{ product.unit }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <label class="field quantity-field">
+                        <span>Quantity</span>
+                        <input type="text" name="quantity" value="{{ item.quantity }}" placeholder="1 or 1.5" required>
+                    </label>
+
+                    <button class="icon-button" type="button" data-remove-item>Remove</button>
+                </div>
+            {% endfor %}
+        </div>
+
+        <template id="order-item-template">
+            <div class="order-item-row">
+                <label class="field grow">
+                    <span>Product</span>
+                    <select name="product_id" required>
+                        <option value="">Select product</option>
+                        {% for product in products %}
+                            <option value="{{ product.id }}">
+                                {{ product.name }} · {{ product.base_unit_price|money }} / {{ product.unit }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="field quantity-field">
+                    <span>Quantity</span>
+                    <input type="text" name="quantity" placeholder="1 or 1.5" required>
+                </label>
+
+                <button class="icon-button" type="button" data-remove-item>Remove</button>
+            </div>
+        </template>
+
+        <button class="secondary-button" type="button" data-add-item>Add another item</button>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h3>Order note</h3>
+            <p>Optional internal or customer note for the order.</p>
+        </div>
+        <label class="field field-full">
+            <span>Note</span>
+            <textarea name="note" rows="4">{{ form_data.get('note', '') }}</textarea>
+        </label>
+    </section>
+
+    <div class="toolbar-actions">
+        <button class="primary-button" type="submit">Create phone order</button>
+        <a class="secondary-button" href="{{ url_for('admin_orders_dashboard') }}">Back to orders</a>
+    </div>
+</form>
+{% endblock %}

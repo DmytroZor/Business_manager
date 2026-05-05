@@ -16,8 +16,10 @@ async def test_product_update_trims_name(monkeypatch):
         name="Old name",
         sku="TEST-1",
         description="Old",
+        image_url=None,
         base_unit_price=Decimal("10.00"),
         unit="kg",
+        available_quantity=Decimal("4.000"),
         is_active=True,
     )
     monkeypatch.setattr(product_service, "get_product_by_id", AsyncMock(return_value=product))
@@ -33,27 +35,9 @@ async def test_product_update_trims_name(monkeypatch):
     db.refresh.assert_awaited_once_with(product)
 
 
-@pytest.mark.asyncio
-async def test_product_update_rejects_empty_unit(monkeypatch):
-    db = AsyncMock()
-    product = Product(
-        name="Test",
-        sku="TEST-2",
-        description=None,
-        base_unit_price=Decimal("10.00"),
-        unit="kg",
-        is_active=True,
-    )
-    monkeypatch.setattr(product_service, "get_product_by_id", AsyncMock(return_value=product))
-
-    with pytest.raises(HTTPException) as exc:
-        await product_service.product_update_by_id(
-            db=db,
-            product_id=1,
-            product_data=ProductUpdate(unit=" "),
-        )
-
-    assert exc.value.status_code == 422
+def test_product_update_rejects_empty_unit():
+    with pytest.raises(ValueError):
+        ProductUpdate(unit=" ")
 
 
 @pytest.mark.asyncio
@@ -68,3 +52,28 @@ async def test_product_update_returns_none_for_unknown_product(monkeypatch):
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_product_update_requires_payload(monkeypatch):
+    db = AsyncMock()
+    product = Product(
+        name="Old name",
+        sku="TEST-2",
+        description="Old",
+        image_url=None,
+        base_unit_price=Decimal("10.00"),
+        unit="kg",
+        available_quantity=Decimal("4.000"),
+        is_active=True,
+    )
+    monkeypatch.setattr(product_service, "get_product_by_id", AsyncMock(return_value=product))
+
+    with pytest.raises(HTTPException) as exc:
+        await product_service.product_update_by_id(
+            db=db,
+            product_id=1,
+            product_data=ProductUpdate(),
+        )
+
+    assert exc.value.status_code == 400

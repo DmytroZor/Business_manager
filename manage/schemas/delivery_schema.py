@@ -4,7 +4,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.models import DeliveryStatus
+from core.models import DeliveryStatus, OrderStatus
+from manage.schemas.order_schema import OrderItemOut
 
 
 class DeliveryAssignCreate(BaseModel):
@@ -40,9 +41,40 @@ class DeliveryStatusUpdate(BaseModel):
     )
 
 
-class DeliveryOut(BaseModel):
+class CourierOrderAddressOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    street: str
+    building: str
+    apartment: str | None = None
+    notes: str | None = None
+
+
+class CourierOrderCustomerOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    full_name: str
+    phone: str
+
+
+class CourierOrderOut(BaseModel):
+    id: int
+    status: OrderStatus
+    placed_at: datetime
+    total_amount: Decimal
+    note: str | None = None
+    delivery_address: CourierOrderAddressOut | None = None
+    customer: CourierOrderCustomerOut | None = None
+    items: list[OrderItemOut] = Field(default_factory=list)
+
+
+class CourierAssignedInfoOut(BaseModel):
+    full_name: str
+    phone: str
+    vehicle_info: str | None = None
+
+
+class CourierDeliveryOut(BaseModel):
     id: int
     order_id: int
     courier_id: Optional[int]
@@ -54,3 +86,5 @@ class DeliveryOut(BaseModel):
     failed_reason: Optional[str]
     fee: Decimal
     created_at: datetime
+    order: CourierOrderOut | None = None
+    courier: CourierAssignedInfoOut | None = None

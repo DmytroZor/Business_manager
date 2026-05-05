@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_db
 from core.models import Courier, DeliveryStatus, User, UserRole
 from manage.schemas.delivery_schema import (
+    CourierDeliveryOut,
+    CourierOrderOut,
     DeliveryAssignCreate,
-    DeliveryOut,
     DeliverySelfAssignCreate,
     DeliveryStatusUpdate,
 )
-from manage.schemas.order_schema import OrderOut
 from manage.services import delivery_service
 from routers.user_router import get_current_user
 
@@ -52,7 +52,7 @@ def _get_customer_profile_id(current_user: User) -> int:
 
 @router.post(
     "/orders/{order_id}",
-    response_model=DeliveryOut,
+    response_model=CourierDeliveryOut,
     status_code=status.HTTP_201_CREATED,
     summary="Assign courier delivery to order",
     description="Creates a delivery record for an order and assigns a courier profile.",
@@ -64,12 +64,13 @@ async def assign_delivery_to_order(
         current_user: User = Depends(get_current_user),
 ):
     _ensure_role(current_user, UserRole.ADMIN)
-    return await delivery_service.assign_delivery(db, order_id, payload)
+    delivery = await delivery_service.assign_delivery(db, order_id, payload)
+    return delivery_service.build_delivery_payload(delivery)
 
 
 @router.get(
     "/available-orders",
-    response_model=List[OrderOut],
+    response_model=List[CourierOrderOut],
     status_code=status.HTTP_200_OK,
     summary="List available orders for courier self-assignment",
     description="Returns orders that are ready to be taken by couriers and do not have active delivery assignments.",
@@ -81,12 +82,13 @@ async def get_available_orders(
         current_user: User = Depends(get_current_user),
 ):
     _ensure_role(current_user, UserRole.COURIER, UserRole.ADMIN)
-    return await delivery_service.get_available_orders_for_courier(db, limit=limit, offset=offset)
+    orders = await delivery_service.get_available_orders_for_courier(db, limit=limit, offset=offset)
+    return [delivery_service.build_available_order_payload(order) for order in orders]
 
 
 @router.post(
     "/orders/{order_id}/self-assign",
-    response_model=DeliveryOut,
+    response_model=CourierDeliveryOut,
     status_code=status.HTTP_201_CREATED,
     summary="Courier self-assigns an order",
     description="Authenticated courier takes an available order into personal delivery queue.",
@@ -98,12 +100,13 @@ async def self_assign_delivery_to_order(
         current_user: User = Depends(get_current_user),
 ):
     _ensure_role(current_user, UserRole.COURIER)
-    return await delivery_service.self_assign_delivery(db, order_id, current_user.id, payload)
+    delivery = await delivery_service.self_assign_delivery(db, order_id, current_user.id, payload)
+    return delivery_service.build_delivery_payload(delivery)
 
 
 @router.get(
     "/my",
-    response_model=List[DeliveryOut],
+    response_model=List[CourierDeliveryOut],
     status_code=status.HTTP_200_OK,
     summary="List current courier deliveries",
     description="Returns deliveries assigned to the authenticated courier.",
@@ -117,18 +120,19 @@ async def get_my_deliveries(
 ):
     _ensure_role(current_user, UserRole.COURIER)
     courier_id = await _get_courier_profile_id(db, current_user)
-    return await delivery_service.get_my_deliveries(
+    deliveries = await delivery_service.get_my_deliveries(
         db,
         courier_id,
         status_filter=status_filter,
         limit=limit,
         offset=offset,
     )
+    return [delivery_service.build_delivery_payload(delivery) for delivery in deliveries]
 
 
 @router.get(
     "/{delivery_id}",
-    response_model=DeliveryOut,
+    response_model=CourierDeliveryOut,
     status_code=status.HTTP_200_OK,
     summary="Get delivery by ID",
     description="Courier can read own delivery, admin can read any delivery.",
@@ -141,7 +145,7 @@ async def get_delivery_by_id(
     delivery = await delivery_service.get_delivery_by_id(db, delivery_id)
 
     if current_user.role == UserRole.ADMIN:
-        return delivery
+        return delivery_service.build_delivery_payload(delivery)
 
     if current_user.role != UserRole.COURIER:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
@@ -150,12 +154,12 @@ async def get_delivery_by_id(
     if delivery.courier_id != courier_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your delivery")
 
-    return delivery
+    return delivery_service.build_delivery_payload(delivery)
 
 
 @router.patch(
     "/{delivery_id}/pick-up",
-    response_model=DeliveryOut,
+    response_model=CourierDeliveryOut,
     status_code=status.HTTP_200_OK,
     summary="Mark delivery as picked up",
     description="Courier marks delivery as picked up from the shop.",
@@ -167,12 +171,13 @@ async def pick_up_delivery(
 ):
     _ensure_role(current_user, UserRole.COURIER)
     courier_id = await _get_courier_profile_id(db, current_user)
-    return await delivery_service.pick_up_delivery(db, delivery_id, courier_id)
+    delivery = await delivery_service.pick_up_delivery(db, delivery_id, courier_id)
+    return delivery_service.build_delivery_payload(delivery)
 
 
 @router.patch(
     "/{delivery_id}/complete",
-    response_model=DeliveryOut,
+    response_model=CourierDeliveryOut,
     status_code=status.HTTP_200_OK,
     summary="Mark delivery as completed",
     description="Courier marks delivery as successfully delivered.",
@@ -184,12 +189,13 @@ async def complete_delivery(
 ):
     _ensure_role(current_user, UserRole.COURIER)
     courier_id = await _get_courier_profile_id(db, current_user)
-    return await delivery_service.complete_delivery(db, delivery_id, courier_id)
+    delivery = await delivery_service.complete_delivery(db, delivery_id, courier_id)
+    return delivery_service.build_delivery_payload(delivery)
 
 
 @router.patch(
     "/{delivery_id}/fail",
-    response_model=DeliveryOut,
+    response_model=CourierDeliveryOut,
     status_code=status.HTTP_200_OK,
     summary="Mark delivery as failed",
     description="Courier reports a failed delivery attempt.",
@@ -202,4 +208,5 @@ async def fail_delivery(
 ):
     _ensure_role(current_user, UserRole.COURIER)
     courier_id = await _get_courier_profile_id(db, current_user)
-    return await delivery_service.fail_delivery(db, delivery_id, courier_id, payload)
+    delivery = await delivery_service.fail_delivery(db, delivery_id, courier_id, payload)
+    return delivery_service.build_delivery_payload(delivery)

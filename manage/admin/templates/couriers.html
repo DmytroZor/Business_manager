@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Courier roster</p>
+        <h2>Active couriers</h2>
+        <p class="page-copy">Quick reference for assignment-ready couriers connected to the backend, plus a direct way to pre-create new courier accounts for Telegram login.</p>
+    </div>
+</section>
+
+{% if create_error %}
+    <div class="banner danger">{{ create_error }}</div>
+{% endif %}
+{% if message %}
+    <div class="banner success">{{ message }}</div>
+{% endif %}
+
+<section class="panel">
+    <div class="panel-heading">
+        <h3>Create courier account</h3>
+        <p>Pre-create the courier in the backend so they can log into Telegram later and link their Telegram ID to the existing account.</p>
+    </div>
+    <form class="stack-form" method="post" action="{{ url_for('admin_courier_create_action') }}">
+        <label class="field">
+            <span>Full name</span>
+            <input type="text" name="full_name" value="{{ create_form_data.full_name if create_form_data else '' }}" required>
+        </label>
+        <label class="field">
+            <span>Phone</span>
+            <input type="text" name="phone_number" value="{{ create_form_data.phone_number if create_form_data else '' }}" required>
+        </label>
+        <label class="field">
+            <span>Password</span>
+            <input type="password" name="password" value="" required>
+        </label>
+        <label class="field">
+            <span>Vehicle info</span>
+            <input type="text" name="vehicle_info" value="{{ create_form_data.vehicle_info if create_form_data else '' }}" placeholder="Car, bike, scooter">
+        </label>
+        <label class="field">
+            <span>Email (optional)</span>
+            <input type="email" name="email" value="{{ create_form_data.email if create_form_data else '' }}">
+        </label>
+        <button class="primary-button" type="submit">Create courier</button>
+    </form>
+</section>
+
+<section class="card-grid">
+    {% if couriers %}
+        {% for courier in couriers %}
+            <article class="panel courier-card">
+                <div class="panel-heading">
+                    <h3>{{ courier.full_name }}</h3>
+                    <span class="status-pill success">Active</span>
+                </div>
+                <dl class="meta-grid">
+                    <div>
+                        <dt>Phone</dt>
+                        <dd>{{ courier.phone }}</dd>
+                    </div>
+                    <div>
+                        <dt>Email</dt>
+                        <dd>{{ courier.email or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Vehicle</dt>
+                        <dd>{{ courier.vehicle_info or 'Not specified' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Telegram</dt>
+                        <dd>{{ courier.telegram_id or 'Not linked' }}</dd>
+                    </div>
+                </dl>
+            </article>
+        {% endfor %}
+    {% else %}
+        <article class="panel empty-card">
+            <h3>No active couriers found</h3>
+            <p>Create or activate courier accounts in the backend first.</p>
+        </article>
+    {% endif %}
+</section>
+{% endblock %}

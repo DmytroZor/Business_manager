@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set edit_values = edit_form_data or selected_product or {} %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Warehouse and catalog</p>
+        <h2>Products, batches, and stock documents</h2>
+        <p class="page-copy">Keep the catalog clean, record every receipt or correction as a document, and trace physical stock by batch.</p>
+    </div>
+</section>
+
+{% if message %}
+    <div class="banner success">{{ message }}</div>
+{% endif %}
+
+<section class="stats-grid">
+    <article class="stat-card">
+        <span class="stat-label">Total</span>
+        <strong>{{ stats.get('total', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Active</span>
+        <strong>{{ stats.get('active', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Inactive</span>
+        <strong>{{ stats.get('inactive', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Free stock</span>
+        <strong>{{ stats.get('in_stock', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Low stock</span>
+        <strong>{{ stats.get('low_stock', 0) }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Out of stock</span>
+        <strong>{{ stats.get('out_of_stock', 0) }}</strong>
+    </article>
+</section>
+
+<form class="panel toolbar" method="get" action="{{ url_for('admin_products_page') }}">
+    <label class="field grow">
+        <span>Search</span>
+        <input type="text" name="search" value="{{ search }}" placeholder="Name, SKU, description">
+    </label>
+
+    <label class="field">
+        <span>Status</span>
+        <select name="active_filter">
+            <option value="all" {% if active_filter == 'all' %}selected{% endif %}>All products</option>
+            <option value="is_active" {% if active_filter == 'is_active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if active_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+    </label>
+
+    <label class="field">
+        <span>Stock</span>
+        <select name="stock_filter">
+            <option value="all" {% if stock_filter == 'all' %}selected{% endif %}>All stock states</option>
+            <option value="in_stock" {% if stock_filter == 'in_stock' %}selected{% endif %}>Free stock available</option>
+            <option value="low_stock" {% if stock_filter == 'low_stock' %}selected{% endif %}>Low free stock</option>
+            <option value="out_of_stock" {% if stock_filter == 'out_of_stock' %}selected{% endif %}>No free stock</option>
+        </select>
+    </label>
+
+    <div class="toolbar-actions">
+        <button class="primary-button" type="submit">Apply</button>
+        <a class="secondary-button" href="{{ url_for('admin_products_page') }}">Reset</a>
+    </div>
+</form>
+
+<section class="workspace-grid">
+    <div class="panel list-panel">
+        <div class="panel-heading">
+            <h3>Product library</h3>
+            <p>Use the list as your live catalog and warehouse roster.</p>
+        </div>
+
+        <div class="product-list">
+            {% if products %}
+                {% for product in products %}
+                    <a
+                        class="product-row {% if selected_product_id == product.id %}is-active{% endif %}"
+                        href="{{ url_for('admin_products_page') }}?selected_product_id={{ product.id }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}"
+                    >
+                        <div class="product-row-main">
+                            {% if product.image_url %}
+                                <img class="product-thumb" src="{{ product.image_url }}" alt="{{ product.name }}">
+                            {% else %}
+                                <div class="product-thumb placeholder">No image</div>
+                            {% endif %}
+
+                            <div class="detail-grid compact-grid">
+                                <div>
+                                    <strong>{{ product.name }}</strong>
+                                    <span class="table-subline">{{ product.sku }}</span>
+                                </div>
+                                <div class="product-metrics">
+                                    <strong>{{ product.base_unit_price|money }}</strong>
+                                    <span class="table-subline">
+                                        Free {{ product.available_quantity|quantity }} {{ product.unit }} ·
+                                        Reserved {{ product.reserved_quantity|quantity }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="product-badges">
+                            <span class="status-pill {% if product.is_active %}success{% endif %}">
+                                {% if product.is_active %}Active{% else %}Inactive{% endif %}
+                            </span>
+                            <span class="status-pill {% if product.available_quantity|float > 0 %}success{% endif %}">
+                                On hand {{ product.stock_on_hand|quantity }}
+                            </span>
+                        </div>
+                    </a>
+                {% endfor %}
+            {% else %}
+                <article class="empty-card slim">
+                    <h3>No products match these filters</h3>
+                    <p>Try a broader search or create a new catalog card.</p>
+                </article>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stack-layout">
+        <section class="panel">
+            <div class="panel-heading">
+                <h3>Warehouse document</h3>
+                <p>Register receipts, corrections, and inventory counts as separate warehouse documents with supplier, batch, and pricing data.</p>
+            </div>
+
+            {% if stock_document_error %}
+                <div class="banner danger">{{ stock_document_error }}</div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('admin_product_stock_sheet_action') }}" class="stack-form">
+                <input type="hidden" name="search" value="{{ search }}">
+                <input type="hidden" name="active_filter" value="{{ active_filter }}">
+                <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                <input type="hidden" name="selected_product_id" value="{{ selected_product_id or '' }}">
+
+                <div class="form-grid two-columns">
+                    <label class="field">
+                        <span>Document type</span>
+                        <select name="document_type">
+                            {% for value, label in stock_document_type_options %}
+                                <option value="{{ value }}" {% if stock_document_form_data.get('document_type') == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span>Document number</span>
+                        <input type="text" name="document_number" value="{{ stock_document_form_data.get('document_number', '') }}" placeholder="INV-2026-05-04-01">
+                    </label>
+                    <label class="field">
+                        <span>Document date</span>
+                        <input type="date" name="document_date" value="{{ stock_document_form_data.get('document_date', '') }}" required>
+                    </label>
+                    <label class="field">
+                        <span>Supplier name</span>
+                        <input type="text" name="supplier_name" value="{{ stock_document_form_data.get('supplier_name', '') }}" placeholder="Seafood Supplier LLC">
+                    </label>
+                    <label class="field">
+                        <span>Supplier phone</span>
+                        <input type="text" name="supplier_phone" value="{{ stock_document_form_data.get('supplier_phone', '') }}" placeholder="+380...">
+                    </label>
+                    <label class="field">
+                        <span>Supplier email</span>
+                        <input type="email" name="supplier_email" value="{{ stock_document_form_data.get('supplier_email', '') }}" placeholder="supply@example.com">
+                    </label>
+                    <label class="field field-full">
+                        <span>Supplier notes</span>
+                        <input type="text" name="supplier_notes" value="{{ stock_document_form_data.get('supplier_notes', '') }}" placeholder="Cold-chain delivery, morning slot, etc.">
+                    </label>
+                    <label class="field field-full">
+                        <span>Document note</span>
+                        <textarea name="note" rows="3" placeholder="Optional comment for this document">{{ stock_document_form_data.get('note', '') }}</textarea>
+                    </label>
+                </div>
+
+                <div class="table-shell">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Unit</th>
+                            <th>Sell price</th>
+                            <th>Purchase price</th>
+                            <th>Qty / count</th>
+                            <th>Batch</th>
+                            <th>Serial</th>
+                            <th>Expires</th>
+                            <th>Note</th>
+                        </tr>
+                        </thead>
+                        <tbody id="stock-document-rows">
+                        {% for row in stock_document_rows %}
+                            <tr>
+                                <td><input type="text" name="doc_name" value="{{ row.name }}" placeholder="Salmon fillet"></td>
+                                <td><input type="text" name="doc_unit" value="{{ row.unit or 'kg' }}" placeholder="kg"></td>
+                                <td><input type="number" step="0.01" min="0.01" name="doc_sale_unit_price" value="{{ row.sale_unit_price or '' }}" placeholder="390.00"></td>
+                                <td><input type="number" step="0.01" min="0.01" name="doc_purchase_unit_price" value="{{ row.purchase_unit_price or '' }}" placeholder="290.00"></td>
+                                <td><input type="number" step="0.001" name="doc_quantity_value" value="{{ row.quantity_value or '' }}" placeholder="+5.000 / -1.250 / 12.000"></td>
+                                <td><input type="text" name="doc_batch_code" value="{{ row.batch_code or '' }}" placeholder="BATCH-001"></td>
+                                <td><input type="text" name="doc_serial_code" value="{{ row.serial_code or '' }}" placeholder="Optional"></td>
+                                <td><input type="date" name="doc_expires_at" value="{{ row.expires_at or '' }}"></td>
+                                <td><input type="text" name="doc_note" value="{{ row.note or '' }}" placeholder="Optional"></td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="toolbar-actions">
+                    <button class="secondary-button" type="button" id="stock-document-add-row">Add row</button>
+                    <button class="primary-button" type="submit">Save warehouse document</button>
+                </div>
+
+                <p class="muted-copy">
+                    Receipt uses signed quantity to add stock, adjustment increases or decreases free stock, and inventory count treats the quantity as the actual physical stock on hand for that product.
+                </p>
+                <p class="muted-copy">
+                    Every saved document becomes part of the audit trail with supplier, document date, line history, batch code, serial number, and expiration date.
+                </p>
+            </form>
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <h3>Recent warehouse documents</h3>
+                <p>Last saved receipts, adjustments, and inventory counts.</p>
+            </div>
+
+            {% if recent_stock_documents %}
+                <div class="stack-layout">
+                    {% for document in recent_stock_documents %}
+                        <article class="order-card">
+                            <div class="order-card-header">
+                                <div>
+                                    <strong>{{ document.document_number }}</strong>
+                                    <p class="table-subline">
+                                        {{ document.document_type|replace('_', ' ')|title }} · {{ document.document_date }}
+                                        {% if document.supplier_name %}· {{ document.supplier_name }}{% endif %}
+                                    </p>
+                                </div>
+                                <div class="product-badges">
+                                    <span class="status-pill success">{{ document.items|length }} row(s)</span>
+                                </div>
+                            </div>
+                            {% if document.note %}
+                                <p class="muted-copy">{{ document.note }}</p>
+                            {% endif %}
+                            <div class="table-shell">
+                                <table class="data-table">
+                                    <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th>Input qty</th>
+                                        <th>Applied delta</th>
+                                        <th>Purchase</th>
+                                        <th>Batch</th>
+                                        <th>Expires</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for item in document.items %}
+                                        <tr>
+                                            <td>{{ item.product_name }}</td>
+                                            <td>{{ item.quantity_value|quantity }} {{ item.unit }}</td>
+                                            <td>{{ item.applied_delta|quantity }} {{ item.unit }}</td>
+                                            <td>{% if item.purchase_unit_price is not none %}{{ item.purchase_unit_price|money }}{% else %}—{% endif %}</td>
+                                            <td>{{ item.batch_code or item.serial_code or '—' }}</td>
+                                            <td>{{ item.expires_at or '—' }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <article class="empty-card slim">
+                    <h3>No warehouse documents yet</h3>
+                    <p>The first saved receipt or correction will appear here.</p>
+                </article>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <h3>Create product card</h3>
+                <p>Create a catalog card first if you want a clean public listing. Stock can still arrive later through warehouse documents.</p>
+            </div>
+
+            {% if create_error %}
+                <div class="banner danger">{{ create_error }}</div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('admin_product_create_action') }}" class="stack-form">
+                <input type="hidden" name="search" value="{{ search }}">
+                <input type="hidden" name="active_filter" value="{{ active_filter }}">
+                <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                <input type="hidden" name="selected_product_id" value="{{ selected_product_id or '' }}">
+                <input type="hidden" name="available_quantity" value="{{ create_form_data.get('available_quantity', '0.000') }}">
+
+                <div class="form-grid two-columns">
+                    <label class="field">
+                        <span>Name</span>
+                        <input type="text" name="name" value="{{ create_form_data.get('name', '') }}" required>
+                    </label>
+                    <label class="field">
+                        <span>Unit</span>
+                        <input type="text" name="unit" value="{{ create_form_data.get('unit', 'kg') }}" required>
+                    </label>
+                    <label class="field">
+                        <span>Selling price</span>
+                        <input type="number" step="0.01" min="0.01" name="base_unit_price" value="{{ create_form_data.get('base_unit_price', '') }}" required>
+                    </label>
+                    <label class="field">
+                        <span>Initial free stock</span>
+                        <input type="number" step="0.001" min="0" name="available_quantity_preview" value="{{ create_form_data.get('available_quantity', '0.000') }}" disabled>
+                    </label>
+                    <label class="field field-full">
+                        <span>Image URL</span>
+                        <input type="url" name="image_url" value="{{ create_form_data.get('image_url', '') }}" placeholder="https://...">
+                    </label>
+                    <label class="field field-full">
+                        <span>Description</span>
+                        <textarea name="description" rows="4">{{ create_form_data.get('description', '') }}</textarea>
+                    </label>
+                </div>
+
+                <p class="muted-copy">
+                    Use the warehouse document above for audited stock movement. This form is mainly for catalog data and selling price.
+                </p>
+
+                <label class="toggle-field">
+                    <input type="checkbox" name="is_active" value="true" {% if create_form_data.get('is_active', True) %}checked{% endif %}>
+                    <span>Show product in the active catalog</span>
+                </label>
+
+                <div class="toolbar-actions">
+                    <button class="primary-button" type="submit">Create product</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="panel">
+            {% if selected_product %}
+                <div class="panel-heading">
+                    <h3>Edit product</h3>
+                    <p>Update the customer-facing card while keeping stock movement in warehouse documents.</p>
+                </div>
+
+                {% if edit_error %}
+                    <div class="banner danger">{{ edit_error }}</div>
+                {% endif %}
+
+                <div class="product-preview-shell">
+                    {% if selected_product.image_url %}
+                        <img class="product-preview" src="{{ selected_product.image_url }}" alt="{{ selected_product.name }}">
+                    {% else %}
+                        <div class="product-preview placeholder">No image preview</div>
+                    {% endif %}
+
+                    <div class="product-preview-meta">
+                        <h4>{{ selected_product.name }}</h4>
+                        <p class="muted-copy">SKU {{ selected_product.sku }}</p>
+                        <p class="muted-copy">Updated {{ selected_product.updated_at|datetime }}</p>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <article class="stat-card">
+                        <span class="stat-label">Free stock</span>
+                        <strong>{{ selected_product.available_quantity|quantity }} {{ selected_product.unit }}</strong>
+                    </article>
+                    <article class="stat-card">
+                        <span class="stat-label">Reserved</span>
+                        <strong>{{ selected_product.reserved_quantity|quantity }} {{ selected_product.unit }}</strong>
+                    </article>
+                    <article class="stat-card">
+                        <span class="stat-label">On hand</span>
+                        <strong>{{ selected_product.stock_on_hand|quantity }} {{ selected_product.unit }}</strong>
+                    </article>
+                    <article class="stat-card">
+                        <span class="stat-label">Last purchase</span>
+                        <strong>{% if selected_product.last_purchase_price is not none %}{{ selected_product.last_purchase_price|money }}{% else %}—{% endif %}</strong>
+                    </article>
+                </div>
+
+                <form method="post" action="{{ url_for('admin_product_update_action', product_id=selected_product.id) }}" class="stack-form">
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="active_filter" value="{{ active_filter }}">
+                    <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                    <input type="hidden" name="available_quantity" value="{{ selected_product.available_quantity }}">
+
+                    <div class="form-grid two-columns">
+                        <label class="field">
+                            <span>Name</span>
+                            <input type="text" name="name" value="{{ edit_values.get('name', selected_product.name) }}" required>
+                        </label>
+                        <label class="field">
+                            <span>Unit</span>
+                            <input type="text" name="unit" value="{{ edit_values.get('unit', selected_product.unit) }}" required>
+                        </label>
+                        <label class="field">
+                            <span>Selling price</span>
+                            <input type="number" step="0.01" min="0.01" name="base_unit_price" value="{{ edit_values.get('base_unit_price', selected_product.base_unit_price) }}" required>
+                        </label>
+                        <label class="field">
+                            <span>Free stock</span>
+                            <input type="number" step="0.001" min="0" value="{{ selected_product.available_quantity }}" disabled>
+                        </label>
+                        <label class="field field-full">
+                            <span>Image URL</span>
+                            <input type="url" name="image_url" value="{{ edit_values.get('image_url', selected_product.image_url or '') }}" placeholder="https://...">
+                        </label>
+                        <label class="field field-full">
+                            <span>Description</span>
+                            <textarea name="description" rows="4">{{ edit_values.get('description', selected_product.description or '') }}</textarea>
+                        </label>
+                    </div>
+
+                    <label class="toggle-field">
+                        <input type="checkbox" name="is_active" value="true" {% if edit_values.get('is_active', selected_product.is_active) %}checked{% endif %}>
+                        <span>Product is active in the customer catalog</span>
+                    </label>
+
+                    <div class="toolbar-actions">
+                        <button class="primary-button" type="submit">Save changes</button>
+                    </div>
+                </form>
+
+                <div class="panel-heading">
+                    <h3>Batch traceability</h3>
+                    <p>Physical stock that currently sits on the warehouse shelf.</p>
+                </div>
+
+                {% if selected_product_batches %}
+                    <div class="table-shell">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>Batch</th>
+                                <th>Serial</th>
+                                <th>Supplier</th>
+                                <th>Purchase</th>
+                                <th>Available</th>
+                                <th>Original</th>
+                                <th>Expires</th>
+                                <th>Document</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for batch in selected_product_batches %}
+                                <tr>
+                                    <td>{{ batch.batch_code or '—' }}</td>
+                                    <td>{{ batch.serial_code or '—' }}</td>
+                                    <td>{{ batch.supplier_name or '—' }}</td>
+                                    <td>{% if batch.purchase_unit_price is not none %}{{ batch.purchase_unit_price|money }}{% else %}—{% endif %}</td>
+                                    <td>{{ batch.available_quantity|quantity }} {{ selected_product.unit }}</td>
+                                    <td>{{ batch.original_quantity|quantity }} {{ selected_product.unit }}</td>
+                                    <td>{{ batch.expires_at or '—' }}</td>
+                                    <td>{{ batch.document_number or 'Opening balance' }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <article class="empty-card slim">
+                        <h3>No batches recorded yet</h3>
+                        <p>The next warehouse document for this product will create a tracked batch automatically.</p>
+                    </article>
+                {% endif %}
+            {% else %}
+                <article class="empty-card">
+                    <h3>Select a product</h3>
+                    <p>Open a product from the library to inspect its current stock, batch trail, and customer-facing data.</p>
+                </article>
+            {% endif %}
+        </section>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const addRowButton = document.getElementById("stock-document-add-row");
+            const rowsContainer = document.getElementById("stock-document-rows");
+            if (!addRowButton || !rowsContainer) {
+                return;
+            }
+
+            addRowButton.addEventListener("click", () => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td><input type="text" name="doc_name" placeholder="Salmon fillet"></td>
+                    <td><input type="text" name="doc_unit" value="kg" placeholder="kg"></td>
+                    <td><input type="number" step="0.01" min="0.01" name="doc_sale_unit_price" placeholder="390.00"></td>
+                    <td><input type="number" step="0.01" min="0.01" name="doc_purchase_unit_price" placeholder="290.00"></td>
+                    <td><input type="number" step="0.001" name="doc_quantity_value" placeholder="+5.000 / -1.250 / 12.000"></td>
+                    <td><input type="text" name="doc_batch_code" placeholder="BATCH-001"></td>
+                    <td><input type="text" name="doc_serial_code" placeholder="Optional"></td>
+                    <td><input type="date" name="doc_expires_at"></td>
+                    <td><input type="text" name="doc_note" placeholder="Optional"></td>
+                `;
+                rowsContainer.appendChild(row);
+            });
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BusinessManageSystem Admin</title>
+    <link rel="stylesheet" href="{{ url_for('admin_static', path='admin.css') }}">
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    <script src="{{ url_for('admin_static', path='admin.js') }}" defer></script>
+</head>
+<body>
+{% if admin_user %}
+    <div class="admin-shell">
+        <aside class="sidebar">
+            <div class="brand-block">
+                <p class="eyebrow">BusinessManageSystem</p>
+                <h1>Admin Console</h1>
+                <p class="brand-copy">Dispatch, phone orders, and order operations in one place.</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('admin_orders_dashboard') }}" class="{% if section == 'orders' %}active{% endif %}">
+                    Orders
+                </a>
+                <a href="{{ url_for('admin_phone_order_page') }}" class="{% if section == 'phone-order' %}active{% endif %}">
+                    Phone Order
+                </a>
+                <a href="{{ url_for('admin_products_page') }}" class="{% if section == 'products' %}active{% endif %}">
+                    Products
+                </a>
+                <a href="{{ url_for('admin_couriers_page') }}" class="{% if section == 'couriers' %}active{% endif %}">
+                    Couriers
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="admin-chip">
+                    <span class="dot"></span>
+                    <span>{{ admin_user.full_name }}</span>
+                </div>
+                <a class="muted-link" href="/docs" target="_blank" rel="noreferrer">Open API Docs</a>
+                <form method="post" action="{{ url_for('admin_logout_action') }}">
+                    <button class="ghost-button" type="submit">Log out</button>
+                </form>
+            </div>
+        </aside>
+
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+{% else %}
+    <main class="auth-shell">
+        {% block auth_content %}{% endblock %}
+    </main>
+{% endif %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block auth_content %}
+<section class="auth-card">
+    <div class="auth-copy">
+        <p class="eyebrow">Private Access</p>
+        <h1>Operations dashboard for the fish market team</h1>
+        <p>
+            Use an administrator account from `BusinessManageSystem` to manage orders,
+            dispatch couriers, and create phone orders from a browser.
+        </p>
+    </div>
+
+    <form method="post" action="{{ url_for('admin_login_action') }}" class="panel login-form">
+        <div class="panel-heading">
+            <h2>Admin sign in</h2>
+            <p>Log in with email or phone number.</p>
+        </div>
+
+        {% if error %}
+            <div class="banner danger">{{ error }}</div>
+        {% endif %}
+
+        <label class="field">
+            <span>Identifier</span>
+            <input type="text" name="username" placeholder="+380... or admin@example.com" required>
+        </label>
+
+        <label class="field">
+            <span>Password</span>
+            <input type="password" name="password" placeholder="Enter password" required>
+        </label>
+
+        <button class="primary-button" type="submit">Open admin panel</button>
+    </form>
+</section>
+{% endblock %}
+

@@ -36,8 +36,10 @@ def test_create_product_requires_auth(monkeypatch):
         json={
             "name": "Salmon",
             "description": "Fresh fish",
+            "image_url": "https://example.com/salmon.jpg",
             "base_unit_price": "10.00",
             "unit": "kg",
+            "available_quantity": "6.000",
             "is_active": True,
         },
     )
@@ -50,10 +52,16 @@ def test_create_product_with_auth_returns_201(monkeypatch):
         "sku": "RIBA-20260416-TEST",
         "name": "Salmon",
         "description": "Fresh fish",
+        "image_url": "https://example.com/salmon.jpg",
         "base_unit_price": "10.00",
+        "last_purchase_price": None,
         "unit": "kg",
+        "available_quantity": "6.000",
+        "reserved_quantity": "0.000",
+        "stock_on_hand": "6.000",
         "is_active": True,
         "created_at": "2026-04-16T12:00:00Z",
+        "updated_at": "2026-04-16T12:00:00Z",
     }
     monkeypatch.setattr(product_router.product_service, "create_product", AsyncMock(return_value=created))
     client = create_test_client(
@@ -66,8 +74,10 @@ def test_create_product_with_auth_returns_201(monkeypatch):
         json={
             "name": "Salmon",
             "description": "Fresh fish",
+            "image_url": "https://example.com/salmon.jpg",
             "base_unit_price": "10.00",
             "unit": "kg",
+            "available_quantity": "6.000",
             "is_active": True,
         },
     )

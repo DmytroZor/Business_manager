@@ -5,6 +5,7 @@ from typing import List
 from pydantic import BaseModel, Field, field_validator
 
 from core.models import DeliveryStatus, OrderStatus
+from manage.schemas.auth_schema import phone_number_normalizer
 
 
 class OrderItemCreate(BaseModel):
@@ -85,6 +86,21 @@ class AdminOrderDeliveryInfo(BaseModel):
     courier: AdminOrderCourierInfo | None = Field(None, description="Assigned courier details.")
 
 
+class AdminOrderEventOut(BaseModel):
+    id: int = Field(..., description="Event identifier.")
+    event_type: str = Field(..., description="Audit event type.")
+    source: str = Field(..., description="Event source.")
+    actor_user_id: int | None = Field(None, description="Actor user identifier.")
+    actor_role: str | None = Field(None, description="Actor role.")
+    actor_name: str | None = Field(None, description="Actor full name.")
+    previous_order_status: OrderStatus | None = Field(None, description="Previous order status.")
+    new_order_status: OrderStatus | None = Field(None, description="New order status.")
+    previous_delivery_status: DeliveryStatus | None = Field(None, description="Previous delivery status.")
+    new_delivery_status: DeliveryStatus | None = Field(None, description="New delivery status.")
+    message: str | None = Field(None, description="Human-friendly event note.")
+    created_at: datetime = Field(..., description="Event timestamp.")
+
+
 class AdminOrderOut(BaseModel):
     id: int = Field(..., description="Order identifier.")
     status: OrderStatus = Field(..., description="Order status.")
@@ -95,6 +111,7 @@ class AdminOrderOut(BaseModel):
     delivery_address: AdminOrderAddressInfo | None = Field(None, description="Delivery address.")
     items: List[OrderItemOut] = Field(..., description="Order items.")
     active_delivery: AdminOrderDeliveryInfo | None = Field(None, description="Active delivery information.")
+    events: List[AdminOrderEventOut] = Field(default_factory=list, description="Order audit timeline.")
 
 
 class AdminPhoneOrderCreate(BaseModel):
@@ -108,6 +125,25 @@ class AdminPhoneOrderCreate(BaseModel):
     note: str | None = Field(default=None, max_length=2000, description="Optional order note.")
     items: List[OrderItemCreate] = Field(..., min_length=1, description="Order line items.")
 
+    @field_validator("customer_phone_number")
+    @classmethod
+    def normalize_phone_number(cls, value: str) -> str:
+        return phone_number_normalizer(value)
+
 
 class OrderCancelPayload(BaseModel):
     reason: str | None = Field(default=None, max_length=2000, description="Optional cancellation reason.")
+
+
+class AdminOrderItemQuantityUpdate(BaseModel):
+    item_id: int = Field(..., gt=0, description="Order item identifier.")
+    quantity: Decimal = Field(..., ge=0, description="Updated quantity. Zero removes the item.")
+
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.001"), rounding=ROUND_DOWN)
+
+
+class AdminOrderItemsUpdate(BaseModel):
+    items: List[AdminOrderItemQuantityUpdate] = Field(..., min_length=1, description="Updated order line items.")

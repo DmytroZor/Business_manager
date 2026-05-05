@@ -1,0 +1,61 @@
+{% if orders %}
+    <div class="order-list">
+        {% for order in orders %}
+            <a
+                class="order-row {% if selected_order_id == order.id %}is-active{% endif %}"
+                href="{{ url_for('admin_orders_dashboard') }}?selected_order_id={{ order.id }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}&page={{ page }}"
+                hx-get="{{ url_for('admin_order_detail', order_id=order.id) }}?search={{ search|urlencode }}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}&page={{ page }}"
+                hx-target="#order-detail"
+                hx-swap="innerHTML"
+                data-order-link
+                data-order-id="{{ order.id }}"
+            >
+                <div class="order-row-top">
+                    <strong>#{{ order.id }}</strong>
+                    <span class="status-pill">{{ order.status|order_status }}</span>
+                </div>
+                <div class="order-row-body">
+                    <span>{{ order.customer.full_name if order.customer else 'Unknown customer' }}</span>
+                    <span>{{ order.customer.phone if order.customer else '-' }}</span>
+                    <span>{{ order.total_amount|money }}</span>
+                </div>
+                <div class="order-row-foot">
+                    <span>{{ order.placed_at|datetime }}</span>
+                    <span>
+                        {% if order.active_delivery and order.active_delivery.courier %}
+                            {{ order.active_delivery.courier.full_name }}
+                        {% else %}
+                            Courier not assigned
+                        {% endif %}
+                    </span>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+    {% if total_pages > 1 %}
+        <div class="toolbar-actions">
+            {% if page > 1 %}
+                <a
+                    class="secondary-button"
+                    href="{{ url_for('admin_orders_dashboard') }}?page={{ page - 1 }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}"
+                >
+                    Previous 10
+                </a>
+            {% endif %}
+            <span class="table-subline">Queue page {{ page }} / {{ total_pages }}</span>
+            {% if page < total_pages %}
+                <a
+                    class="secondary-button"
+                    href="{{ url_for('admin_orders_dashboard') }}?page={{ page + 1 }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}"
+                >
+                    Next 10
+                </a>
+            {% endif %}
+        </div>
+    {% endif %}
+{% else %}
+    <div class="empty-card slim">
+        <h3>No orders match the current filters</h3>
+        <p>Try another status or a broader search query.</p>
+    </div>
+{% endif %}
