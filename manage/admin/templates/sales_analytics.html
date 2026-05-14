@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">{{ ui_t.analytics.eyebrow }}</p>
+        <h2>{{ ui_t.analytics.title }}</h2>
+        <p class="page-copy">{{ ui_t.analytics["copy"] }}</p>
+    </div>
+</section>
+
+<form class="panel toolbar" method="get" action="{{ url_for('admin_sales_analytics_page') }}">
+    <label class="field">
+        <span>{{ ui_t.analytics.period }}</span>
+        <select name="period">
+            {% for value, label in sales_analytics_period_options %}
+                <option value="{{ value }}" {% if analytics_period == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label class="field">
+        <span>{{ ui_t.analytics.sort_by }}</span>
+        <select name="sort_by">
+            {% for value, label in sales_analytics_sort_options %}
+                <option value="{{ value }}" {% if analytics_sort == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label class="field">
+        <span>{{ ui_t.analytics.rows }}</span>
+        <select name="limit">
+            {% for option in [10, 20, 30, 50, 100] %}
+                <option value="{{ option }}" {% if analytics_limit == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <div class="toolbar-actions">
+        <button class="primary-button" type="submit">{{ ui_t.analytics.apply }}</button>
+    </div>
+</form>
+
+<section class="stats-grid">
+    <article class="stat-card">
+        <span class="stat-label">{{ ui_t.analytics.unique_products }}</span>
+        <strong>{{ analytics_summary.total_products }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">{{ ui_t.analytics.total_quantity }}</span>
+        <strong>{{ analytics_summary.total_quantity|quantity }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">{{ ui_t.analytics.revenue }}</span>
+        <strong>{{ analytics_summary.total_revenue|money }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">{{ ui_t.analytics.orders_included }}</span>
+        <strong>{{ analytics_summary.total_orders }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">{{ ui_t.analytics.period_start }}</span>
+        <strong>{% if analytics_period_start %}{{ analytics_period_start|datetime }}{% else %}{{ ui_t.analytics.all_time }}{% endif %}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">{{ ui_t.analytics.generated }}</span>
+        <strong>{{ analytics_generated_at|datetime }}</strong>
+    </article>
+</section>
+
+<section class="workspace-grid analytics-grid">
+    <div class="panel list-panel">
+        <div class="panel-heading">
+            <h3>{{ ui_t.analytics.top_selling }}</h3>
+            <p>{{ ui_t.analytics.top_selling_copy }}</p>
+        </div>
+
+        {% if analytics_items %}
+            <div class="analytics-list">
+                {% for item in analytics_items %}
+                    {% set quantity_width = ((item.total_quantity|float / analytics_max_quantity|float) * 100) if analytics_max_quantity|float > 0 else 0 %}
+                    {% set revenue_width = ((item.total_revenue|float / analytics_max_revenue|float) * 100) if analytics_max_revenue|float > 0 else 0 %}
+                    <article class="analytics-card">
+                        <div class="analytics-card-top">
+                            <div>
+                                <strong>{{ item.product_name }}</strong>
+                                <div class="table-subline">
+                                    {% if item.product_sku %}<code>{{ item.product_sku }}</code> · {% endif %}
+                                    {{ item.unit }}
+                                </div>
+                            </div>
+                            <div class="product-badges">
+                                <span class="status-pill success">{{ item.order_count }} {{ ui_t.analytics.orders }}</span>
+                            </div>
+                        </div>
+                        <div class="analytics-bars">
+                            <div class="analytics-bar-row">
+                                <span>{{ ui_t.analytics.quantity }}</span>
+                                <div class="analytics-bar">
+                                    <div class="analytics-bar-fill quantity-fill" style="width: {{ quantity_width|round(1) }}%;"></div>
+                                </div>
+                                <strong>{{ item.total_quantity|quantity }} {{ item.unit }}</strong>
+                            </div>
+                            <div class="analytics-bar-row">
+                                <span>{{ ui_t.analytics.revenue }}</span>
+                                <div class="analytics-bar">
+                                    <div class="analytics-bar-fill revenue-fill" style="width: {{ revenue_width|round(1) }}%;"></div>
+                                </div>
+                                <strong>{{ item.total_revenue|money }}</strong>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <article class="empty-card">
+                <h3>{{ ui_t.analytics.no_sales_title }}</h3>
+                <p>{{ ui_t.analytics.no_sales_copy }}</p>
+            </article>
+        {% endif %}
+    </div>
+
+    <div class="stack-layout">
+        <section class="panel">
+            <div class="panel-heading">
+                <h3>{{ ui_t.analytics.detailed_ranking }}</h3>
+                <p>{{ ui_t.analytics.detailed_ranking_copy }}</p>
+            </div>
+
+            {% if analytics_items %}
+                <div class="table-shell">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>{{ ui_t.analytics.product }}</th>
+                            <th>{{ ui_t.analytics.sku }}</th>
+                            <th>{{ ui_t.analytics.unit }}</th>
+                            <th>{{ ui_t.analytics.quantity_sold }}</th>
+                            <th>{{ ui_t.analytics.revenue }}</th>
+                            <th>{{ ui_t.analytics.orders }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for item in analytics_items %}
+                            <tr>
+                                <td>{{ item.product_name }}</td>
+                                <td>{{ item.product_sku or '—' }}</td>
+                                <td>{{ item.unit }}</td>
+                                <td>{{ item.total_quantity|quantity }}</td>
+                                <td>{{ item.total_revenue|money }}</td>
+                                <td>{{ item.order_count }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <article class="empty-card slim">
+                    <h3>{{ ui_t.analytics.no_rows_title }}</h3>
+                    <p>{{ ui_t.analytics.no_rows_copy }}</p>
+                </article>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <h3>{{ ui_t.analytics.slowest }}</h3>
+                <p>{{ ui_t.analytics.slowest_copy }}</p>
+            </div>
+
+            {% if analytics_bottom_items %}
+                <div class="table-shell">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>{{ ui_t.analytics.product }}</th>
+                            <th>{{ ui_t.analytics.quantity_sold }}</th>
+                            <th>{{ ui_t.analytics.revenue }}</th>
+                            <th>{{ ui_t.analytics.orders }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for item in analytics_bottom_items %}
+                            <tr>
+                                <td>{{ item.product_name }}</td>
+                                <td>{{ item.total_quantity|quantity }} {{ item.unit }}</td>
+                                <td>{{ item.total_revenue|money }}</td>
+                                <td>{{ item.order_count }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <article class="empty-card slim">
+                    <h3>{{ ui_t.analytics.not_enough_title }}</h3>
+                    <p>{{ ui_t.analytics.not_enough_copy }}</p>
+                </article>
+            {% endif %}
+        </section>
+    </div>
+</section>
+{% endblock %}

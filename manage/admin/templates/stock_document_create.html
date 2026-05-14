@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">{{ stock_t.list_eyebrow }}</p>
+        <h2>{{ stock_t.create_title }}</h2>
+        <p class="page-copy">{{ stock_t.create_copy }}</p>
+    </div>
+    <div class="toolbar-actions">
+        <a class="secondary-button" href="{{ stock_document_list_url }}">{{ stock_t.open_list }}</a>
+    </div>
+</section>
+
+{% if message %}
+    <div class="banner success">{{ message }}</div>
+{% endif %}
+
+{% if stock_document_error %}
+    <div class="banner danger">{{ stock_document_error }}</div>
+{% endif %}
+
+<section class="panel">
+    <form method="post" action="{{ stock_document_create_action_url }}" class="stack-form">
+        <div class="form-grid two-columns">
+            <label class="field">
+                <span>{{ stock_t.document_number }}</span>
+                <input id="document-number-input" type="text" name="document_number" value="{{ stock_document_form_data.get('document_number', '') }}" readonly>
+            </label>
+            <label class="field">
+                <span>{{ stock_t.document_date }}</span>
+                <input id="document-date-input" type="date" name="document_date" value="{{ stock_document_form_data.get('document_date', '') }}" required>
+            </label>
+            <label class="field">
+                <span>{{ stock_t.supplier_name }}</span>
+                <input type="text" name="supplier_name" value="{{ stock_document_form_data.get('supplier_name', '') }}" placeholder="{{ stock_t.supplier_name_placeholder }}">
+            </label>
+            <label class="field">
+                <span>{{ stock_t.supplier_phone }}</span>
+                <input type="text" name="supplier_phone" value="{{ stock_document_form_data.get('supplier_phone', '') }}" placeholder="{{ stock_t.supplier_phone_placeholder }}">
+            </label>
+            <label class="field">
+                <span>{{ stock_t.supplier_email }}</span>
+                <input type="email" name="supplier_email" value="{{ stock_document_form_data.get('supplier_email', '') }}" placeholder="{{ stock_t.supplier_email_placeholder }}">
+            </label>
+            <label class="field field-full">
+                <span>{{ stock_t.supplier_notes }}</span>
+                <input type="text" name="supplier_notes" value="{{ stock_document_form_data.get('supplier_notes', '') }}" placeholder="{{ stock_t.supplier_notes_placeholder }}">
+            </label>
+            <label class="field field-full">
+                <span>{{ stock_t.document_note }}</span>
+                <textarea name="note" rows="3" placeholder="{{ stock_t.document_note_placeholder }}">{{ stock_document_form_data.get('note', '') }}</textarea>
+            </label>
+        </div>
+
+        <div class="table-shell">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>{{ stock_t.existing_product }}</th>
+                    <th>{{ stock_t.sku }}</th>
+                    <th>{{ stock_t.name }}</th>
+                    <th>{{ stock_t.unit }}</th>
+                    <th>{{ stock_t.sell_price }}</th>
+                    <th>{{ stock_t.purchase_price }}</th>
+                    <th>{{ stock_t.quantity }}</th>
+                    <th>{{ stock_t.batch }}</th>
+                    <th>{{ stock_t.serial }}</th>
+                    <th>{{ stock_t.expires }}</th>
+                    <th>{{ stock_t.note }}</th>
+                </tr>
+                </thead>
+                <tbody id="stock-document-rows">
+                {% for row in stock_document_rows %}
+                    <tr class="stock-document-row">
+                        <td>
+                            <select name="doc_product_id" class="js-product-picker">
+                                <option value="">{{ stock_t.manual_new }}</option>
+                                {% for product in product_reference_options %}
+                                    <option
+                                        value="{{ product.id }}"
+                                        data-name="{{ product.name }}"
+                                        data-sku="{{ product.sku or '' }}"
+                                        data-unit="{{ product.unit }}"
+                                        data-sale-price="{{ product.base_unit_price }}"
+                                        data-purchase-price="{{ product.last_purchase_price or '' }}"
+                                        {% if row.product_id|int == product.id %}selected{% endif %}
+                                    >
+                                        {{ product.name }}{% if product.sku %} - {{ product.sku }}{% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td><input type="text" name="doc_sku" value="{{ row.sku or '' }}" class="js-product-sku" placeholder="Auto" readonly></td>
+                        <td><input type="text" name="doc_name" value="{{ row.name }}" class="js-product-name" placeholder="{{ stock_t.product_name_placeholder }}"></td>
+                        <td><input type="text" name="doc_unit" value="{{ row.unit or 'kg' }}" class="js-product-unit" placeholder="{{ stock_t.unit_placeholder }}"></td>
+                        <td><input type="number" step="0.01" min="0.01" name="doc_sale_unit_price" value="{{ row.sale_unit_price or '' }}" class="js-sale-price" placeholder="{{ stock_t.sale_price_placeholder }}"></td>
+                        <td><input type="number" step="0.01" min="0.01" name="doc_purchase_unit_price" value="{{ row.purchase_unit_price or '' }}" class="js-purchase-price" placeholder="{{ stock_t.purchase_price_placeholder }}"></td>
+                        <td><input type="number" step="0.001" name="doc_quantity_value" value="{{ row.quantity_value or '' }}" placeholder="{{ stock_t.quantity_placeholder }}"></td>
+                        <td><input type="text" name="doc_batch_code" value="{{ row.batch_code or '' }}" placeholder="{{ stock_t.batch_placeholder }}"></td>
+                        <td><input type="text" name="doc_serial_code" value="{{ row.serial_code or '' }}" placeholder="{{ stock_t.optional_placeholder }}"></td>
+                        <td><input type="date" name="doc_expires_at" value="{{ row.expires_at or '' }}"></td>
+                        <td><input type="text" name="doc_note" value="{{ row.note or '' }}" placeholder="{{ stock_t.optional_placeholder }}"></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="toolbar-actions">
+            <button class="secondary-button" type="button" id="stock-document-add-row">{{ stock_t.add_row }}</button>
+            <button class="primary-button" type="submit">{{ stock_t.save }}</button>
+        </div>
+    </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const rowsContainer = document.getElementById("stock-document-rows");
+            const addRowButton = document.getElementById("stock-document-add-row");
+            const dateInput = document.getElementById("document-date-input");
+            const numberInput = document.getElementById("document-number-input");
+            const nextNumberUrl = {{ stock_document_next_number_url|tojson }};
+            const manualNewLabel = {{ stock_t.manual_new|tojson }};
+            const productNamePlaceholder = {{ stock_t.product_name_placeholder|tojson }};
+            const unitPlaceholder = {{ stock_t.unit_placeholder|tojson }};
+            const salePricePlaceholder = {{ stock_t.sale_price_placeholder|tojson }};
+            const purchasePricePlaceholder = {{ stock_t.purchase_price_placeholder|tojson }};
+            const quantityPlaceholder = {{ stock_t.quantity_placeholder|tojson }};
+            const batchPlaceholder = {{ stock_t.batch_placeholder|tojson }};
+            const optionalPlaceholder = {{ stock_t.optional_placeholder|tojson }};
+            if (!rowsContainer || !addRowButton) {
+                return;
+            }
+
+            const productOptions = `{% for product in product_reference_options %}<option value="{{ product.id }}" data-name="{{ product.name }}" data-sku="{{ product.sku or '' }}" data-unit="{{ product.unit }}" data-sale-price="{{ product.base_unit_price }}" data-purchase-price="{{ product.last_purchase_price or '' }}">{{ product.name }}{% if product.sku %} - {{ product.sku }}{% endif %}</option>{% endfor %}`;
+
+            const syncRowFromProduct = (row) => {
+                const picker = row.querySelector(".js-product-picker");
+                if (!picker) {
+                    return;
+                }
+                const selected = picker.options[picker.selectedIndex];
+                if (!selected || !selected.value) {
+                    return;
+                }
+                const setValue = (selector, value) => {
+                    const input = row.querySelector(selector);
+                    if (!input || value === undefined) {
+                        return;
+                    }
+                    input.value = value;
+                };
+                setValue(".js-product-sku", selected.dataset.sku || "");
+                setValue(".js-product-name", selected.dataset.name || "");
+                setValue(".js-product-unit", selected.dataset.unit || "kg");
+                if (!row.querySelector(".js-sale-price").value) {
+                    setValue(".js-sale-price", selected.dataset.salePrice || "");
+                }
+                if (!row.querySelector(".js-purchase-price").value) {
+                    setValue(".js-purchase-price", selected.dataset.purchasePrice || "");
+                }
+            };
+
+            const bindRow = (row) => {
+                const picker = row.querySelector(".js-product-picker");
+                if (!picker) {
+                    return;
+                }
+                picker.addEventListener("change", () => syncRowFromProduct(row));
+                if (picker.value) {
+                    syncRowFromProduct(row);
+                }
+            };
+
+            const refreshDocumentNumber = async () => {
+                if (!dateInput || !numberInput || !dateInput.value) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`${nextNumberUrl}&document_date=${encodeURIComponent(dateInput.value)}`);
+                    if (!response.ok) {
+                        return;
+                    }
+                    const payload = await response.json();
+                    if (payload.document_number) {
+                        numberInput.value = payload.document_number;
+                    }
+                } catch (error) {
+                    console.error("Could not refresh document number", error);
+                }
+            };
+
+            rowsContainer.querySelectorAll(".stock-document-row").forEach(bindRow);
+
+            addRowButton.addEventListener("click", () => {
+                const row = document.createElement("tr");
+                row.className = "stock-document-row";
+                row.innerHTML = `
+                    <td>
+                        <select name="doc_product_id" class="js-product-picker">
+                            <option value="">${manualNewLabel}</option>
+                            ${productOptions}
+                        </select>
+                    </td>
+                    <td><input type="text" name="doc_sku" class="js-product-sku" placeholder="Auto" readonly></td>
+                    <td><input type="text" name="doc_name" class="js-product-name" placeholder="${productNamePlaceholder}"></td>
+                    <td><input type="text" name="doc_unit" class="js-product-unit" value="kg" placeholder="${unitPlaceholder}"></td>
+                    <td><input type="number" step="0.01" min="0.01" name="doc_sale_unit_price" class="js-sale-price" placeholder="${salePricePlaceholder}"></td>
+                    <td><input type="number" step="0.01" min="0.01" name="doc_purchase_unit_price" class="js-purchase-price" placeholder="${purchasePricePlaceholder}"></td>
+                    <td><input type="number" step="0.001" name="doc_quantity_value" placeholder="${quantityPlaceholder}"></td>
+                    <td><input type="text" name="doc_batch_code" placeholder="${batchPlaceholder}"></td>
+                    <td><input type="text" name="doc_serial_code" placeholder="${optionalPlaceholder}"></td>
+                    <td><input type="date" name="doc_expires_at"></td>
+                    <td><input type="text" name="doc_note" placeholder="${optionalPlaceholder}"></td>
+                `;
+                rowsContainer.appendChild(row);
+                bindRow(row);
+            });
+
+            if (dateInput) {
+                dateInput.addEventListener("change", refreshDocumentNumber);
+            }
+        });
+    </script>
+{% endblock %}

@@ -31,6 +31,13 @@ USER_DOCS = {
             "Returns created user info and an access token."
         ),
     },
+    "telegram_link": {
+        "summary": "Link Telegram Account",
+        "description": (
+            "Attach a Telegram user identifier to the authenticated account. "
+            "Useful for Telegram bot login and reconnecting existing business users."
+        ),
+    },
 }
 
 

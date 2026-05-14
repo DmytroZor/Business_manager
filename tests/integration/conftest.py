@@ -15,13 +15,13 @@ def test_database_url() -> str:
     return url
 
 
-@pytest.fixture(scope="session")
+
+@pytest.fixture
 async def integration_engine(test_database_url: str):
     engine = create_async_engine(
         test_database_url,
         echo=False,
-        pool_pre_ping=True,
-        poolclass=NullPool,
+        poolclass=NullPool,  # залишаємо
     )
     try:
         yield engine
@@ -29,21 +29,25 @@ async def integration_engine(test_database_url: str):
         await engine.dispose()
 
 
+# reset схеми ПІСЛЯ створення engine кожного тесту
 @pytest.fixture(autouse=True)
 async def reset_schema(integration_engine):
     async with integration_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    yield
 
 
 @pytest.fixture
 def integration_session_maker(integration_engine):
-    return async_sessionmaker(bind=integration_engine, class_=AsyncSession, expire_on_commit=False)
+    return async_sessionmaker(
+        bind=integration_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
 
 
 @pytest.fixture
 async def db_session(integration_session_maker):
-    session_factory = integration_session_maker
-    async with session_factory() as session:
+    async with integration_session_maker() as session:
         yield session
+        await session.rollback()

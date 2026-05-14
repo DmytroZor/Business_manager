@@ -59,6 +59,23 @@ class UserRole(enum.Enum):
     ADMIN = "admin"
 
 
+class NotificationChannel(enum.Enum):
+    TELEGRAM = "telegram"
+
+
+class NotificationDeliveryStatus(enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class StockDocumentType(enum.Enum):
+    RECEIPT = "receipt"
+    ADJUSTMENT = "adjustment"
+    INVENTORY_COUNT = "inventory_count"
+
+
 # -----------------
 # Core domain tables
 # -----------------
@@ -81,6 +98,8 @@ class User(Base):
     # relationships
     customer_profile = relationship("Customer", back_populates="user", uselist=False)
     courier_profile = relationship("Courier", back_populates="user", uselist=False)
+    order_events = relationship("OrderEventLog", back_populates="actor_user")
+    created_stock_documents = relationship("StockDocument", back_populates="created_by_user")
 
 
 class Customer(Base):
@@ -161,8 +180,13 @@ class Product(Base):
     name = Column(String(200), nullable=False, index=True)
     sku = Column(String(64), nullable=True, unique=True)
     description = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
     base_unit_price = Column(Numeric(10, 2), nullable=False)  # поточна ціна
+    last_purchase_price = Column(Numeric(10, 2), nullable=True)
+    last_purchase_at = Column(Date, nullable=True, index=True)
     unit = Column(String(20), nullable=False, default="kg")
+    available_quantity = Column(Numeric(10, 3), nullable=False, default=0)
+    reserved_quantity = Column(Numeric(10, 3), nullable=False, default=0)
     is_active = Column(Boolean, default=True, nullable=False)  # чи показувати в каталозі
     available_from = Column(Date, nullable=True)  # очікувана дата доступності, якщо not available_today
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -170,8 +194,142 @@ class Product(Base):
 
     order_items = relationship("OrderItem", back_populates="product")
     reviews = relationship("Review", back_populates="product")
+    stock_document_items = relationship("StockDocumentItem", back_populates="product")
+    batches = relationship("ProductBatch", back_populates="product", cascade="all, delete-orphan")
     __table_args__ = (
         CheckConstraint("base_unit_price > 0", name="ck_product_base_unit_price_positive"),
+        CheckConstraint("available_quantity >= 0", name="ck_product_available_quantity_non_negative"),
+        CheckConstraint("reserved_quantity >= 0", name="ck_product_reserved_quantity_non_negative"),
+        CheckConstraint(
+            "last_purchase_price IS NULL OR last_purchase_price > 0",
+            name="ck_product_last_purchase_price_positive",
+        ),
+    )
+
+    @property
+    def stock_on_hand(self):
+        return (self.available_quantity or 0) + (self.reserved_quantity or 0)
+
+
+class Supplier(Base):
+    """Business supplier that ships stock to the warehouse."""
+
+    __tablename__ = "supplier"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False, unique=True, index=True)
+    phone = Column(String(30), nullable=True)
+    email = Column(String(200), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    stock_documents = relationship("StockDocument", back_populates="supplier")
+    batches = relationship("ProductBatch", back_populates="supplier")
+
+
+class StockDocument(Base):
+    """Receipt / adjustment / inventory count document."""
+
+    __tablename__ = "stock_document"
+
+    id = Column(Integer, primary_key=True)
+    document_number = Column(String(100), nullable=False, index=True)
+    document_type = Column(SAEnum(StockDocumentType), nullable=False)
+    document_date = Column(Date, nullable=False, index=True)
+    supplier_id = Column(Integer, ForeignKey("supplier.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    supplier = relationship("Supplier", back_populates="stock_documents")
+    created_by_user = relationship("User", back_populates="created_stock_documents")
+    items = relationship(
+        "StockDocumentItem",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="StockDocumentItem.id.asc()",
+    )
+    batches = relationship("ProductBatch", back_populates="stock_document")
+
+    __table_args__ = (
+        Index("ix_stock_document_type_date", "document_type", "document_date"),
+    )
+
+
+class StockDocumentItem(Base):
+    """Single line in a warehouse document."""
+
+    __tablename__ = "stock_document_item"
+
+    id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey("stock_document.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True, index=True)
+    product_name = Column(String(200), nullable=False)
+    unit = Column(String(20), nullable=False)
+    quantity_value = Column(Numeric(10, 3), nullable=False)
+    applied_delta = Column(Numeric(10, 3), nullable=False, default=0)
+    sale_unit_price = Column(Numeric(10, 2), nullable=True)
+    purchase_unit_price = Column(Numeric(10, 2), nullable=True)
+    batch_code = Column(String(100), nullable=True)
+    serial_code = Column(String(100), nullable=True)
+    expires_at = Column(Date, nullable=True)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    document = relationship("StockDocument", back_populates="items")
+    product = relationship("Product", back_populates="stock_document_items")
+    batches = relationship("ProductBatch", back_populates="stock_document_item")
+
+    __table_args__ = (
+        CheckConstraint(
+            "sale_unit_price IS NULL OR sale_unit_price > 0",
+            name="ck_stock_document_item_sale_price_positive",
+        ),
+        CheckConstraint(
+            "purchase_unit_price IS NULL OR purchase_unit_price > 0",
+            name="ck_stock_document_item_purchase_price_positive",
+        ),
+    )
+
+
+class ProductBatch(Base):
+    """Warehouse batch/lot for traceability and expiration tracking."""
+
+    __tablename__ = "product_batch"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("product.id", ondelete="CASCADE"), nullable=False, index=True)
+    supplier_id = Column(Integer, ForeignKey("supplier.id", ondelete="SET NULL"), nullable=True, index=True)
+    stock_document_id = Column(Integer, ForeignKey("stock_document.id", ondelete="SET NULL"), nullable=True, index=True)
+    stock_document_item_id = Column(
+        Integer,
+        ForeignKey("stock_document_item.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    batch_code = Column(String(100), nullable=True, index=True)
+    serial_code = Column(String(100), nullable=True, index=True)
+    expires_at = Column(Date, nullable=True, index=True)
+    purchase_unit_price = Column(Numeric(10, 2), nullable=True)
+    original_quantity = Column(Numeric(10, 3), nullable=False, default=0)
+    available_quantity = Column(Numeric(10, 3), nullable=False, default=0)
+    note = Column(Text, nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    product = relationship("Product", back_populates="batches")
+    supplier = relationship("Supplier", back_populates="batches")
+    stock_document = relationship("StockDocument", back_populates="batches")
+    stock_document_item = relationship("StockDocumentItem", back_populates="batches")
+    allocations = relationship("OrderItemBatchAllocation", back_populates="batch")
+
+    __table_args__ = (
+        CheckConstraint("original_quantity >= 0", name="ck_product_batch_original_quantity_non_negative"),
+        CheckConstraint("available_quantity >= 0", name="ck_product_batch_available_quantity_non_negative"),
+        CheckConstraint(
+            "purchase_unit_price IS NULL OR purchase_unit_price > 0",
+            name="ck_product_batch_purchase_price_positive",
+        ),
+        Index("ix_product_batch_product_expiry_received", "product_id", "expires_at", "received_at"),
     )
 
 
@@ -206,6 +364,12 @@ class Order(Base):
     payments = relationship("Payment", back_populates="order")
     deliveries = relationship("Delivery", back_populates="order")
     reviews = relationship("Review", back_populates="order")
+    events = relationship(
+        "OrderEventLog",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="OrderEventLog.created_at.desc()",
+    )
 
     # Index to speed queries for recent orders
     __table_args__ = (
@@ -242,10 +406,30 @@ class OrderItem(Base):
 
     product = relationship("Product", back_populates="order_items")
     order = relationship("Order", back_populates="items")
+    batch_allocations = relationship("OrderItemBatchAllocation", back_populates="order_item", cascade="all, delete-orphan")
     __table_args__ = (
         CheckConstraint("unit_price > 0", name="ck_order_item_unit_price_positive"),
         CheckConstraint("quantity > 0", name="ck_order_item_quantity_positive"),
         CheckConstraint("subtotal >= 0", name="ck_order_item_subtotal_non_negative"),
+    )
+
+
+class OrderItemBatchAllocation(Base):
+    """Tracks which warehouse batches were consumed for a picked-up order item."""
+
+    __tablename__ = "order_item_batch_allocation"
+
+    id = Column(Integer, primary_key=True)
+    order_item_id = Column(Integer, ForeignKey("order_item.id", ondelete="CASCADE"), nullable=False, index=True)
+    batch_id = Column(Integer, ForeignKey("product_batch.id", ondelete="CASCADE"), nullable=False, index=True)
+    quantity = Column(Numeric(10, 3), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    order_item = relationship("OrderItem", back_populates="batch_allocations")
+    batch = relationship("ProductBatch", back_populates="allocations")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_order_item_batch_allocation_quantity_positive"),
     )
 
 
@@ -312,6 +496,7 @@ class Delivery(Base):
     # relationships
     order = relationship("Order", back_populates="deliveries")
     courier = relationship("Courier", back_populates="deliveries")
+    events = relationship("OrderEventLog", back_populates="delivery")
     __table_args__ = (
         CheckConstraint("fee >= 0", name="ck_delivery_fee_non_negative"),
         Index("ix_delivery_courier_status", "courier_id", "status"),
@@ -343,3 +528,59 @@ class Review(Base):
     order = relationship("Order", back_populates="reviews")
     product = relationship("Product", back_populates="reviews")
     customer = relationship("Customer", back_populates="reviews")
+
+
+class OrderEventLog(Base):
+    """Audit trail for order and delivery lifecycle changes."""
+
+    __tablename__ = "order_event_log"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    delivery_id = Column(Integer, ForeignKey("delivery.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_role = Column(SAEnum(UserRole), nullable=True)
+    source = Column(String(100), nullable=False, default="system")
+    event_type = Column(String(100), nullable=False, index=True)
+    previous_order_status = Column(SAEnum(OrderStatus), nullable=True)
+    new_order_status = Column(SAEnum(OrderStatus), nullable=True)
+    previous_delivery_status = Column(SAEnum(DeliveryStatus), nullable=True)
+    new_delivery_status = Column(SAEnum(DeliveryStatus), nullable=True)
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    order = relationship("Order", back_populates="events")
+    delivery = relationship("Delivery", back_populates="events")
+    actor_user = relationship("User", back_populates="order_events")
+
+
+class NotificationDelivery(Base):
+    """Outbound notification job to be delivered by the Telegram bot."""
+
+    __tablename__ = "notification_delivery"
+
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String(100), nullable=False, index=True)
+    channel = Column(SAEnum(NotificationChannel), nullable=False, default=NotificationChannel.TELEGRAM)
+    status = Column(
+        SAEnum(NotificationDeliveryStatus),
+        nullable=False,
+        default=NotificationDeliveryStatus.PENDING,
+        index=True,
+    )
+    recipient_role = Column(SAEnum(UserRole), nullable=True, index=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    telegram_chat_id = Column(String(100), nullable=False, index=True)
+    title = Column(String(200), nullable=True)
+    text = Column(Text, nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True)
+    delivery_id = Column(Integer, ForeignKey("delivery.id", ondelete="SET NULL"), nullable=True, index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+    processing_started_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    recipient_user = relationship("User")
+    order = relationship("Order")
+    delivery = relationship("Delivery")

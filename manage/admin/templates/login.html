@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block auth_content %}
+<section class="auth-card">
+    <div class="auth-copy">
+        <p class="eyebrow">{{ ui_t.login.eyebrow }}</p>
+        <h1>{{ ui_t.login.title }}</h1>
+        <p>{{ ui_t.login["copy"] }}</p>
+    </div>
+
+    <form method="post" action="{{ url_for('admin_login_action') }}" class="panel login-form">
+        <div class="panel-heading">
+            <h2>{{ ui_t.login.form_title }}</h2>
+            <p>{{ ui_t.login.form_copy }}</p>
+        </div>
+
+        {% if error %}
+            <div class="banner danger">{{ error }}</div>
+        {% endif %}
+
+        <label class="field">
+            <span>{{ ui_t.login.identifier }}</span>
+            <input type="text" name="username" placeholder="{{ ui_t.login.identifier_placeholder }}" required>
+        </label>
+
+        <label class="field">
+            <span>{{ ui_t.login.password }}</span>
+            <input type="password" name="password" placeholder="{{ ui_t.login.password_placeholder }}" required>
+        </label>
+
+        <button class="primary-button" type="submit">{{ ui_t.login.submit }}</button>
+    </form>
+</section>
+{% endblock %}

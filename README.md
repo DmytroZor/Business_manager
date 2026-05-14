@@ -5,10 +5,15 @@ Backend API for a small business delivery workflow built with FastAPI, SQLAlchem
 ## Features
 
 - User registration and JWT authentication
+- Telegram account linking for existing users
 - Product catalog listing and management
 - Customer delivery address management
 - Order creation with item snapshots and totals
+- Courier delivery workflow with self-assignment and status updates
+- Admin order workflows for courier assignment, phone orders, and cancellations
+- Customer review endpoints for delivered or cancelled orders
 - Alembic-based schema migrations
+- Custom OpenAPI schema and structured error responses
 
 ## Tech Stack
 
@@ -23,10 +28,25 @@ Backend API for a small business delivery workflow built with FastAPI, SQLAlchem
 
 - `main.py` - FastAPI app initialization and router registration
 - `core/` - settings, DB session, SQLAlchemy models
-- `routers/` - HTTP endpoints (Users, Products, Address, Orders)
+- `routers/` - HTTP endpoints (Users, Products, Address, Orders, Deliveries, Reviews)
 - `manage/schemas/` - request/response DTOs for API and Swagger
 - `manage/services/` - business logic layer
+- `manage/docs/` - endpoint descriptions used in Swagger/OpenAPI
 - `alembic/` - migration scripts and environment
+- `tests/` - router, schema, service, and integration tests
+
+## Domain Overview
+
+The API models the full delivery workflow for a fish delivery business:
+
+- `User` with role-based access (`customer`, `courier`, `admin`)
+- `Customer` and `Courier` profiles
+- `Address` records for customer delivery locations
+- `Product` catalog entries
+- `Order` and `OrderItem` snapshots
+- `Delivery` records with assignment and lifecycle status
+- `Payment` records in the data model for future payment tracking
+- `Review` entries linked to orders and optional products
 
 ## Environment Variables
 
@@ -72,10 +92,40 @@ The API includes endpoint-level summaries/descriptions and schema field descript
 
 ## Main Endpoint Groups
 
-- `Users` - register/login/auth context
-- `Products` - create, update, list, get by id
-- `Address` - create, fetch, update customer addresses
-- `Orders` - create order, get by id, list my orders
+- `Users`
+  - `POST /users/register`
+  - `POST /users/login`
+  - `POST /users/me/telegram-link`
+  - `GET /users/admin/couriers`
+- `Products`
+  - `GET /products/`
+  - `GET /products/{product_id}`
+  - `POST /products/`
+  - `PUT /products/{product_id}`
+- `Address`
+  - `POST /address/`
+  - `GET /address/`
+  - `PUT /address/`
+- `Orders`
+  - `POST /orders/`
+  - `GET /orders/`
+  - `GET /orders/{order_id}`
+  - `GET /orders/admin/orders`
+  - `GET /orders/admin/orders/{order_id}`
+  - `POST /orders/admin/phone-order`
+  - `PATCH /orders/admin/orders/{order_id}/cancel`
+- `Deliveries`
+  - `POST /deliveries/orders/{order_id}`
+  - `GET /deliveries/available-orders`
+  - `POST /deliveries/orders/{order_id}/self-assign`
+  - `GET /deliveries/my`
+  - `GET /deliveries/{delivery_id}`
+  - `PATCH /deliveries/{delivery_id}/pick-up`
+  - `PATCH /deliveries/{delivery_id}/complete`
+  - `PATCH /deliveries/{delivery_id}/fail`
+- `Reviews`
+  - `POST /reviews/orders/{order_id}`
+  - `GET /reviews/my`
 
 ## Database Migrations
 
@@ -97,6 +147,27 @@ python -m alembic history
 python -m alembic upgrade head
 ```
 
+## Testing
+
+The repository includes:
+
+- router tests in `tests/api/routers/`
+- schema and service unit tests in `tests/unit/`
+- database-backed integration tests in `tests/integration/`
+
+Run all tests:
+
+```powershell
+pytest
+```
+
+Run integration tests with a dedicated database:
+
+```powershell
+$env:TEST_DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/business_manage_test"
+pytest -m integration
+```
+
 ## Error Handling
 
 Services validate business rules and return explicit HTTP errors for common failures:
@@ -113,3 +184,5 @@ Services validate business rules and return explicit HTTP errors for common fail
 - Timestamps are stored as timezone-aware values.
 - Order creation is transactional and rolled back on failure.
 - Address uniqueness is enforced at DB level per customer/location.
+- Reviews can be created for delivered or cancelled orders.
+- The API is used directly by the `Fish_Market_Bot` Telegram client.

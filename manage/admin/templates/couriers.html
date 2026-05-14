@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">{{ ui_t.couriers.eyebrow }}</p>
+        <h2>{{ ui_t.couriers.title }}</h2>
+        <p class="page-copy">{{ ui_t.couriers["copy"] }}</p>
+    </div>
+</section>
+
+{% if create_error %}
+    <div class="banner danger">{{ create_error }}</div>
+{% endif %}
+{% if message %}
+    <div class="banner success">{{ message }}</div>
+{% endif %}
+
+<section class="panel">
+    <div class="panel-heading">
+        <h3>{{ ui_t.couriers.create_title }}</h3>
+        <p>{{ ui_t.couriers.create_copy }}</p>
+    </div>
+    <form class="stack-form" method="post" action="{{ url_for('admin_courier_create_action') }}">
+        <label class="field">
+            <span>{{ ui_t.couriers.full_name }}</span>
+            <input type="text" name="full_name" value="{{ create_form_data.full_name if create_form_data else '' }}" required>
+        </label>
+        <label class="field">
+            <span>{{ ui_t.couriers.phone }}</span>
+            <input type="text" name="phone_number" value="{{ create_form_data.phone_number if create_form_data else '' }}" required>
+        </label>
+        <label class="field">
+            <span>{{ ui_t.couriers.password }}</span>
+            <input type="password" name="password" value="" required>
+        </label>
+        <label class="field">
+            <span>{{ ui_t.couriers.vehicle_info }}</span>
+            <input type="text" name="vehicle_info" value="{{ create_form_data.vehicle_info if create_form_data else '' }}" placeholder="{{ ui_t.couriers.vehicle_placeholder }}">
+        </label>
+        <label class="field">
+            <span>{{ ui_t.couriers.email_optional }}</span>
+            <input type="email" name="email" value="{{ create_form_data.email if create_form_data else '' }}">
+        </label>
+        <button class="primary-button" type="submit">{{ ui_t.couriers.submit }}</button>
+    </form>
+</section>
+
+<section class="card-grid">
+    {% if couriers %}
+        {% for courier in couriers %}
+            <article class="panel courier-card">
+                <div class="panel-heading">
+                    <h3>{{ courier.full_name }}</h3>
+                    <span class="status-pill success">{{ ui_t.couriers.active }}</span>
+                </div>
+                <dl class="meta-grid">
+                    <div>
+                        <dt>{{ ui_t.couriers.phone }}</dt>
+                        <dd>{{ courier.phone }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ ui_t.couriers.email }}</dt>
+                        <dd>{{ courier.email or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ ui_t.couriers.vehicle }}</dt>
+                        <dd>{{ courier.vehicle_info or ui_t.couriers.not_specified }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ ui_t.couriers.telegram }}</dt>
+                        <dd>{{ courier.telegram_id or ui_t.couriers.not_linked }}</dd>
+                    </div>
+                </dl>
+            </article>
+        {% endfor %}
+    {% else %}
+        <article class="panel empty-card">
+            <h3>{{ ui_t.couriers.empty_title }}</h3>
+            <p>{{ ui_t.couriers.empty_copy }}</p>
+        </article>
+    {% endif %}
+</section>
+{% endblock %}
