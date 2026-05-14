@@ -1,52 +1,133 @@
-# Business Manage System API
+# Business Manage System
 
-Backend API for a small business delivery workflow built with FastAPI, SQLAlchemy (async), and PostgreSQL.
+Backend and management panel for a small-business order, warehouse, and delivery workflow. The system is built around FastAPI, async SQLAlchemy, and PostgreSQL, and serves as the source of truth for products, stock, orders, couriers, invoices, analytics, and Telegram-facing notifications.
 
-## Features
+This project powers:
+- the public operational API used by `Fish_Market_Bot`;
+- the web-based management panel for orders, products, couriers, invoices, and analytics;
+- warehouse document processing through invoices;
+- delivery lifecycle management and event logging.
 
-- User registration and JWT authentication
+## What the System Covers
+
+`BusinessManageSystem` is designed for a delivery business with:
+- one or more managers working in a browser-based management panel;
+- customers placing orders through a social platform interface;
+- couriers working from Telegram;
+- stock updates handled through invoices and product batches.
+
+## Core Features
+
+### Accounts and access
+- JWT-based authentication
+- Roles: `customer`, `courier`, `admin`
 - Telegram account linking for existing users
-- Product catalog listing and management
-- Customer delivery address management
-- Order creation with item snapshots and totals
-- Courier delivery workflow with self-assignment and status updates
-- Admin order workflows for courier assignment, phone orders, and cancellations
-- Customer review endpoints for delivered or cancelled orders
-- Alembic-based schema migrations
-- Custom OpenAPI schema and structured error responses
+- Separate browser login flow for the management panel
+
+### Orders and delivery
+- Product catalog endpoints
+- Delivery address management
+- Order creation with transactional stock validation
+- Phone order creation from the management panel
+- Courier self-assignment and delivery status workflow
+- Cancellation flow with manager reasons
+- Order event log for status changes and operational timeline
+
+### Inventory and warehouse
+- Product management with price, stock, SKU, and availability
+- Product deletion with a required reason
+- Invoice-based stock updates
+- Supplier references
+- Product batch tracking
+- Reserved vs available stock tracking
+- Last purchase date and purchase price tracking
+
+### Management panel
+- Orders dashboard with filters, pagination, and detailed order view
+- Products page with filters, stock corrections, and batch traceability
+- Couriers page for creating courier accounts
+- Phone order page for manager-created orders
+- Invoice list and invoice creation as separate screens
+- Product sales analytics page
+- Global UI language switch for panel pages
+
+### Notifications and auditability
+- Internal Telegram notification queue
+- Customer and courier status notifications
+- Event log for order and delivery state transitions
+- Structured logging and centralized error handling
 
 ## Tech Stack
 
 - Python 3.12+
 - FastAPI
 - SQLAlchemy 2.x (async)
-- Alembic
 - PostgreSQL
-- Pydantic v2 / pydantic-settings
+- Alembic
+- Pydantic v2 / `pydantic-settings`
+- Jinja2 templates
+- JWT authentication
+
+## Architecture Overview
+
+The backend follows a layered architecture:
+
+- `routers/` expose HTTP endpoints
+- `manage/schemas/` define validated DTOs
+- `manage/services/` contain business logic
+- `core/models.py` defines SQLAlchemy models
+- PostgreSQL stores the transactional state
+
+Key service modules:
+- `auth_service.py`
+- `product_service.py`
+- `inventory_service.py`
+- `order_service.py`
+- `delivery_service.py`
+- `notification_service.py`
+- `order_event_service.py`
+- `analytics_service.py`
 
 ## Project Structure
 
-- `main.py` - FastAPI app initialization and router registration
-- `core/` - settings, DB session, SQLAlchemy models
-- `routers/` - HTTP endpoints (Users, Products, Address, Orders, Deliveries, Reviews)
-- `manage/schemas/` - request/response DTOs for API and Swagger
+- `main.py` - FastAPI app initialization, middleware, exception handlers, router registration
+- `core/` - settings, DB session, models, logging config, time helpers
+- `routers/` - HTTP API endpoints
+- `manage/admin/` - management panel routes, templates, static assets, xlsx export
+- `manage/schemas/` - request/response schemas
 - `manage/services/` - business logic layer
-- `manage/docs/` - endpoint descriptions used in Swagger/OpenAPI
+- `manage/docs/` - OpenAPI descriptions
 - `alembic/` - migration scripts and environment
-- `tests/` - router, schema, service, and integration tests
+- `scripts/seed_demo_data.py` - helper to populate demo products, phone orders, couriers, and invoices
+- `tests/` - router, unit, smoke, and integration tests
 
 ## Domain Overview
 
-The API models the full delivery workflow for a fish delivery business:
+The backend models the full operational workflow.
 
-- `User` with role-based access (`customer`, `courier`, `admin`)
-- `Customer` and `Courier` profiles
-- `Address` records for customer delivery locations
-- `Product` catalog entries
-- `Order` and `OrderItem` snapshots
-- `Delivery` records with assignment and lifecycle status
-- `Payment` records in the data model for future payment tracking
-- `Review` entries linked to orders and optional products
+### Main entities
+- `User` - base account record
+- `Customer` - customer profile
+- `Courier` - courier profile
+- `Address` - delivery address
+- `Product` - catalog item with available and reserved stock
+- `Supplier` - product supplier
+- `StockDocument` - warehouse invoice document
+- `StockDocumentItem` - invoice line
+- `ProductBatch` - tracked stock batch
+- `Order` - order header
+- `OrderItem` - order line snapshot
+- `Delivery` - courier delivery lifecycle
+- `Payment` - reserved for payment tracking
+- `Review` - customer product/order review
+- `NotificationDelivery` - internal notification outbox
+- `OrderEventLog` - order and delivery event timeline
+
+### Why these tables matter
+- `Product`, `StockDocument`, and `ProductBatch` implement stock control and warehouse traceability.
+- `Order`, `OrderItem`, and `Delivery` implement the customer-to-courier workflow.
+- `NotificationDelivery` decouples Telegram delivery from transactional order creation.
+- `OrderEventLog` records operational changes for audit and UI timelines.
 
 ## Environment Variables
 
@@ -58,131 +139,175 @@ JWT_SECRET=your_secret
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION=3600
 JWT_REFRESH_EXPIRATION=604800
+INTERNAL_API_TOKEN=your_internal_token
 ```
+
+Important notes:
+- `DATABASE_URL` should point to PostgreSQL
+- `INTERNAL_API_TOKEN` must match the bot configuration
+- on Windows or fresh server images, make sure `tzdata` is available because the project formats Kyiv timezone explicitly
 
 ## Local Setup
 
-1. Create and activate virtual environment.
-2. Install dependencies.
-3. Apply migrations.
-4. Run application.
+### 1. Create and activate a virtual environment
 
-Example (PowerShell):
+PowerShell:
 
 ```powershell
+python -m venv .venv
 .venv\Scripts\Activate.ps1
+```
+
+### 2. Install dependencies
+
+```powershell
 pip install -r requirements.txt
+```
+
+### 3. Apply database migrations
+
+```powershell
 python -m alembic upgrade head
+```
+
+### 4. Run the application
+
+```powershell
 uvicorn main:app --reload
 ```
 
-## API Documentation
-
+Default local URLs:
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - OpenAPI JSON: `http://127.0.0.1:8000/openapi.json`
+- Management panel login: `http://127.0.0.1:8000/admin/login`
 
-The API includes endpoint-level summaries/descriptions and schema field descriptions for detailed Swagger documentation.
+## Management Panel Pages
 
-## Authentication
+The web panel currently includes:
+- `/admin/orders`
+- `/admin/products`
+- `/admin/couriers`
+- `/admin/phone-orders/new`
+- `/admin/stock-documents`
+- `/admin/stock-documents/new`
+- `/admin/analytics/products`
 
-- Registration endpoint: `POST /users/register`
-- Login endpoint: `POST /users/login`
-- Login accepts email or phone number in the `username` field of OAuth2 form.
-- For protected endpoints, authorize in Swagger with the returned bearer token.
+## Main API Groups
 
-## Main Endpoint Groups
+### Users
+- registration
+- login
+- Telegram linking
+- admin courier listing
 
-- `Users`
-  - `POST /users/register`
-  - `POST /users/login`
-  - `POST /users/me/telegram-link`
-  - `GET /users/admin/couriers`
-- `Products`
-  - `GET /products/`
-  - `GET /products/{product_id}`
-  - `POST /products/`
-  - `PUT /products/{product_id}`
-- `Address`
-  - `POST /address/`
-  - `GET /address/`
-  - `PUT /address/`
-- `Orders`
-  - `POST /orders/`
-  - `GET /orders/`
-  - `GET /orders/{order_id}`
-  - `GET /orders/admin/orders`
-  - `GET /orders/admin/orders/{order_id}`
-  - `POST /orders/admin/phone-order`
-  - `PATCH /orders/admin/orders/{order_id}/cancel`
-- `Deliveries`
-  - `POST /deliveries/orders/{order_id}`
-  - `GET /deliveries/available-orders`
-  - `POST /deliveries/orders/{order_id}/self-assign`
-  - `GET /deliveries/my`
-  - `GET /deliveries/{delivery_id}`
-  - `PATCH /deliveries/{delivery_id}/pick-up`
-  - `PATCH /deliveries/{delivery_id}/complete`
-  - `PATCH /deliveries/{delivery_id}/fail`
-- `Reviews`
-  - `POST /reviews/orders/{order_id}`
-  - `GET /reviews/my`
+### Products
+- product list
+- product detail
+- product create/update
+
+### Address
+- create/list/update customer addresses
+
+### Orders
+- customer order create/list/detail
+- admin order list/detail
+- phone order create
+- order item updates
+- order cancellation
+
+### Deliveries
+- available orders
+- self-assign
+- my deliveries
+- pick up
+- complete
+- fail
+
+### Reviews
+- create review
+- list own reviews
+
+### Internal notifications
+- claim pending Telegram notifications
+- acknowledge sent/failed deliveries
 
 ## Database Migrations
 
-- Show current revision:
+Show current revision:
 
 ```powershell
 python -m alembic current
 ```
 
-- Show migration history:
+Show migration history:
 
 ```powershell
 python -m alembic history
 ```
 
-- Upgrade to latest:
+Upgrade to latest:
 
 ```powershell
 python -m alembic upgrade head
 ```
 
+## Demo Data
+
+To populate the main database with demo products, orders, couriers, and invoices:
+
+```powershell
+python scripts\seed_demo_data.py
+```
+
+Use this only when you intentionally want demo operational data in the configured database.
+
 ## Testing
 
-The repository includes:
+### Router and unit tests
 
-- router tests in `tests/api/routers/`
-- schema and service unit tests in `tests/unit/`
-- database-backed integration tests in `tests/integration/`
+```powershell
+pytest tests/api/routers -q
+pytest tests/unit -q
+```
 
-Run all tests:
+### Full test run
 
 ```powershell
 pytest
 ```
 
-Run integration tests with a dedicated database:
+### Integration tests
+
+Integration tests require a dedicated database:
 
 ```powershell
 $env:TEST_DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/business_manage_test"
 pytest -m integration
 ```
 
-## Error Handling
+Do **not** point integration tests at the working database. They recreate schema state and are meant for isolated test environments only.
 
-Services validate business rules and return explicit HTTP errors for common failures:
+### Smoke tests
 
-- `400` - invalid business input / missing profile
-- `401` - unauthorized
-- `404` - entity not found
-- `409` - uniqueness conflict
-- `422` - validation error
-- `500` - unexpected database/internal errors
+Read-only smoke tests can be used against a live database for quick verification:
+
+```powershell
+pytest tests/smoke -q
+```
+
+## Logging and Error Handling
+
+The backend includes:
+- request-aware logging configuration
+- centralized exception handlers
+- structured HTTP errors for validation, auth, not-found, conflict, and internal failures
+
+This makes operational issues easier to trace from both API and management panel flows.
 
 ## Notes
 
-- Timestamps are stored as timezone-aware values.
-- Order creation is transactional and rolled back on failure.
-- Address uniqueness is enforced at DB level per customer/location.
-- Reviews can be created for delivered or cancelled orders.
-- The API is used directly by the `Fish_Market_Bot` Telegram client.
+- All displayed timestamps are formatted in the Kyiv timezone.
+- Order creation is transactional and protected against overselling.
+- Invoices and batches update warehouse state separately from sales flow.
+- The management panel and API share the same business logic layer.
+- The backend is the source of truth; the Telegram bot is a client of this system.
