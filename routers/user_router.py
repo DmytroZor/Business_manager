@@ -78,7 +78,7 @@ async def login(
     phone_value = None
     try:
         phone_value = phone_number_normalizer(identifier)
-    except Exception:
+    except ValueError:
         phone_value = None
 
     if phone_value:

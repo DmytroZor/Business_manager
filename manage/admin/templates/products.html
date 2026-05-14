@@ -2,11 +2,16 @@
 
 {% block content %}
 {% set edit_values = edit_form_data or selected_product or {} %}
+{% set adjust_values = adjust_stock_form_data or {} %}
+{% set p = ui_t.products %}
 <section class="page-header">
     <div>
-        <p class="eyebrow">Warehouse and catalog</p>
-        <h2>Products, batches, and stock documents</h2>
-        <p class="page-copy">Keep the catalog clean, record every receipt or correction as a document, and trace physical stock by batch.</p>
+        <p class="eyebrow">{{ p.eyebrow }}</p>
+        <h2>{{ p.title }}</h2>
+        <p class="page-copy">{{ p["copy"] }}</p>
+    </div>
+    <div class="toolbar-actions">
+        <a class="secondary-button" href="{{ stock_documents_url }}">{{ p.open_stock_documents }}</a>
     </div>
 </section>
 
@@ -16,67 +21,87 @@
 
 <section class="stats-grid">
     <article class="stat-card">
-        <span class="stat-label">Total</span>
+        <span class="stat-label">{{ p.total }}</span>
         <strong>{{ stats.get('total', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Active</span>
+        <span class="stat-label">{{ p.active }}</span>
         <strong>{{ stats.get('active', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Inactive</span>
+        <span class="stat-label">{{ p.inactive }}</span>
         <strong>{{ stats.get('inactive', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Free stock</span>
+        <span class="stat-label">{{ p.free_stock }}</span>
         <strong>{{ stats.get('in_stock', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Low stock</span>
+        <span class="stat-label">{{ p.low_stock }}</span>
         <strong>{{ stats.get('low_stock', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Out of stock</span>
+        <span class="stat-label">{{ p.out_of_stock }}</span>
         <strong>{{ stats.get('out_of_stock', 0) }}</strong>
     </article>
 </section>
 
 <form class="panel toolbar" method="get" action="{{ url_for('admin_products_page') }}">
     <label class="field grow">
-        <span>Search</span>
-        <input type="text" name="search" value="{{ search }}" placeholder="Name, SKU, description">
+        <span>{{ p.search }}</span>
+        <input type="text" name="search" value="{{ search }}" placeholder="{{ p.search_placeholder }}">
     </label>
 
     <label class="field">
-        <span>Status</span>
+        <span>{{ p.status }}</span>
         <select name="active_filter">
-            <option value="all" {% if active_filter == 'all' %}selected{% endif %}>All products</option>
-            <option value="is_active" {% if active_filter == 'is_active' %}selected{% endif %}>Active</option>
-            <option value="inactive" {% if active_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+            <option value="all" {% if active_filter == 'all' %}selected{% endif %}>{{ p.all_products }}</option>
+            <option value="is_active" {% if active_filter == 'is_active' %}selected{% endif %}>{{ p.active_only }}</option>
+            <option value="inactive" {% if active_filter == 'inactive' %}selected{% endif %}>{{ p.inactive_only }}</option>
         </select>
     </label>
 
     <label class="field">
-        <span>Stock</span>
+        <span>{{ p.stock }}</span>
         <select name="stock_filter">
-            <option value="all" {% if stock_filter == 'all' %}selected{% endif %}>All stock states</option>
-            <option value="in_stock" {% if stock_filter == 'in_stock' %}selected{% endif %}>Free stock available</option>
-            <option value="low_stock" {% if stock_filter == 'low_stock' %}selected{% endif %}>Low free stock</option>
-            <option value="out_of_stock" {% if stock_filter == 'out_of_stock' %}selected{% endif %}>No free stock</option>
+            <option value="all" {% if stock_filter == 'all' %}selected{% endif %}>{{ p.all_stock_states }}</option>
+            <option value="in_stock" {% if stock_filter == 'in_stock' %}selected{% endif %}>{{ p.free_stock_available }}</option>
+            <option value="low_stock" {% if stock_filter == 'low_stock' %}selected{% endif %}>{{ p.low_free_stock }}</option>
+            <option value="out_of_stock" {% if stock_filter == 'out_of_stock' %}selected{% endif %}>{{ p.no_free_stock }}</option>
         </select>
     </label>
+
+    <label class="field">
+        <span>{{ 'Група товарів' if ui_lang == 'uk' else 'Product group' }}</span>
+        <select name="category_filter">
+            {% for value, label in product_category_filter_options %}
+                <option value="{{ value }}" {% if category_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <input type="hidden" name="selected_product_id" value="{{ selected_product_id or '' }}">
+    <input type="hidden" name="page" value="1">
 
     <div class="toolbar-actions">
-        <button class="primary-button" type="submit">Apply</button>
-        <a class="secondary-button" href="{{ url_for('admin_products_page') }}">Reset</a>
+        <button class="primary-button" type="submit">{{ ui_t.orders.apply }}</button>
+        <a class="secondary-button" href="{{ url_for('admin_products_page') }}">{{ ui_t.orders.reset }}</a>
     </div>
 </form>
 
 <section class="workspace-grid">
     <div class="panel list-panel">
         <div class="panel-heading">
-            <h3>Product library</h3>
-            <p>Use the list as your live catalog and warehouse roster.</p>
+            <h3>{{ p.product_library }}</h3>
+            <p>
+                {{ p.product_library_copy }}
+                {% if total_products %}
+                    {{ 'Показано' if ui_lang == 'uk' else 'Showing' }} {{ products|length }}
+                    {{ 'з' if ui_lang == 'uk' else 'of' }} {{ total_products }}.
+                    {{ 'Сторінка' if ui_lang == 'uk' else 'Page' }} {{ page }}
+                    {{ 'з' if ui_lang == 'uk' else 'of' }} {{ total_pages }}.
+                {% endif %}
+            </p>
         </div>
 
         <div class="product-list">
@@ -84,13 +109,13 @@
                 {% for product in products %}
                     <a
                         class="product-row {% if selected_product_id == product.id %}is-active{% endif %}"
-                        href="{{ url_for('admin_products_page') }}?selected_product_id={{ product.id }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}"
+                        href="{{ url_for('admin_products_page') }}?selected_product_id={{ product.id }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}&category_filter={{ category_filter|urlencode }}&page={{ page }}"
                     >
                         <div class="product-row-main">
                             {% if product.image_url %}
                                 <img class="product-thumb" src="{{ product.image_url }}" alt="{{ product.name }}">
                             {% else %}
-                                <div class="product-thumb placeholder">No image</div>
+                                <div class="product-thumb placeholder">{{ p.no_image }}</div>
                             {% endif %}
 
                             <div class="detail-grid compact-grid">
@@ -101,8 +126,8 @@
                                 <div class="product-metrics">
                                     <strong>{{ product.base_unit_price|money }}</strong>
                                     <span class="table-subline">
-                                        Free {{ product.available_quantity|quantity }} {{ product.unit }} ·
-                                        Reserved {{ product.reserved_quantity|quantity }}
+                                        {{ p.free_stock }} {{ product.available_quantity|quantity }} {{ product.unit }} ·
+                                        {{ p.reserved }} {{ product.reserved_quantity|quantity }}
                                     </span>
                                 </div>
                             </div>
@@ -110,192 +135,98 @@
 
                         <div class="product-badges">
                             <span class="status-pill {% if product.is_active %}success{% endif %}">
-                                {% if product.is_active %}Active{% else %}Inactive{% endif %}
+                                {% if product.is_active %}{{ p.active_only }}{% else %}{{ p.inactive_only }}{% endif %}
                             </span>
                             <span class="status-pill {% if product.available_quantity|float > 0 %}success{% endif %}">
-                                On hand {{ product.stock_on_hand|quantity }}
+                                {{ p.on_hand }} {{ product.stock_on_hand|quantity }}
                             </span>
                         </div>
                     </a>
                 {% endfor %}
             {% else %}
                 <article class="empty-card slim">
-                    <h3>No products match these filters</h3>
-                    <p>Try a broader search or create a new catalog card.</p>
+                    <h3>{{ p.no_products_title }}</h3>
+                    <p>{{ p.no_products_copy }}</p>
                 </article>
             {% endif %}
         </div>
+
+        {% if total_pages > 1 %}
+            {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+            {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+            <div class="toolbar-actions pagination-bar">
+                {% if page > 1 %}
+                    <a
+                        class="secondary-button"
+                        href="{{ url_for('admin_products_page') }}?page={{ page - 1 }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}&category_filter={{ category_filter|urlencode }}{% if selected_product_id %}&selected_product_id={{ selected_product_id }}{% endif %}"
+                    >
+                        {{ 'Попередні 10' if ui_lang == 'uk' else 'Previous 10' }}
+                    </a>
+                {% endif %}
+                <div class="page-number-group">
+                    {% if start_page > 1 %}
+                        <a
+                            class="page-link"
+                            href="{{ url_for('admin_products_page') }}?page=1&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}&category_filter={{ category_filter|urlencode }}{% if selected_product_id %}&selected_product_id={{ selected_product_id }}{% endif %}"
+                        >
+                            1
+                        </a>
+                        {% if start_page > 2 %}
+                            <span class="table-subline">вЂ¦</span>
+                        {% endif %}
+                    {% endif %}
+                    {% for page_number in range(start_page, end_page + 1) %}
+                        <a
+                            class="page-link {% if page_number == page %}is-active{% endif %}"
+                            href="{{ url_for('admin_products_page') }}?page={{ page_number }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}&category_filter={{ category_filter|urlencode }}{% if selected_product_id %}&selected_product_id={{ selected_product_id }}{% endif %}"
+                        >
+                            {{ page_number }}
+                        </a>
+                    {% endfor %}
+                    {% if end_page < total_pages %}
+                        {% if end_page < total_pages - 1 %}
+                            <span class="table-subline">вЂ¦</span>
+                        {% endif %}
+                        <a
+                            class="page-link"
+                            href="{{ url_for('admin_products_page') }}?page={{ total_pages }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}&category_filter={{ category_filter|urlencode }}{% if selected_product_id %}&selected_product_id={{ selected_product_id }}{% endif %}"
+                        >
+                            {{ total_pages }}
+                        </a>
+                    {% endif %}
+                </div>
+                <span class="table-subline">
+                    {{ 'Сторінка' if ui_lang == 'uk' else 'Page' }} {{ page }} / {{ total_pages }}
+                </span>
+                {% if page < total_pages %}
+                    <a
+                        class="secondary-button"
+                        href="{{ url_for('admin_products_page') }}?page={{ page + 1 }}&search={{ search|urlencode }}&active_filter={{ active_filter|urlencode }}&stock_filter={{ stock_filter|urlencode }}&category_filter={{ category_filter|urlencode }}{% if selected_product_id %}&selected_product_id={{ selected_product_id }}{% endif %}"
+                    >
+                        {{ 'Наступні 10' if ui_lang == 'uk' else 'Next 10' }}
+                    </a>
+                {% endif %}
+                <form class="page-jump-form" method="get" action="{{ url_for('admin_products_page') }}">
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="active_filter" value="{{ active_filter }}">
+                    <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                    <input type="hidden" name="category_filter" value="{{ category_filter }}">
+                    <input type="hidden" name="selected_product_id" value="{{ selected_product_id or '' }}">
+                    <label class="field">
+                        <span>{{ 'Сторінка' if ui_lang == 'uk' else 'Page' }}</span>
+                        <input type="number" name="page" min="1" max="{{ total_pages }}" value="{{ page }}">
+                    </label>
+                    <button class="secondary-button" type="submit">{{ 'Перейти' if ui_lang == 'uk' else 'Go' }}</button>
+                </form>
+            </div>
+        {% endif %}
     </div>
 
     <div class="stack-layout">
         <section class="panel">
             <div class="panel-heading">
-                <h3>Warehouse document</h3>
-                <p>Register receipts, corrections, and inventory counts as separate warehouse documents with supplier, batch, and pricing data.</p>
-            </div>
-
-            {% if stock_document_error %}
-                <div class="banner danger">{{ stock_document_error }}</div>
-            {% endif %}
-
-            <form method="post" action="{{ url_for('admin_product_stock_sheet_action') }}" class="stack-form">
-                <input type="hidden" name="search" value="{{ search }}">
-                <input type="hidden" name="active_filter" value="{{ active_filter }}">
-                <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
-                <input type="hidden" name="selected_product_id" value="{{ selected_product_id or '' }}">
-
-                <div class="form-grid two-columns">
-                    <label class="field">
-                        <span>Document type</span>
-                        <select name="document_type">
-                            {% for value, label in stock_document_type_options %}
-                                <option value="{{ value }}" {% if stock_document_form_data.get('document_type') == value %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="field">
-                        <span>Document number</span>
-                        <input type="text" name="document_number" value="{{ stock_document_form_data.get('document_number', '') }}" placeholder="INV-2026-05-04-01">
-                    </label>
-                    <label class="field">
-                        <span>Document date</span>
-                        <input type="date" name="document_date" value="{{ stock_document_form_data.get('document_date', '') }}" required>
-                    </label>
-                    <label class="field">
-                        <span>Supplier name</span>
-                        <input type="text" name="supplier_name" value="{{ stock_document_form_data.get('supplier_name', '') }}" placeholder="Seafood Supplier LLC">
-                    </label>
-                    <label class="field">
-                        <span>Supplier phone</span>
-                        <input type="text" name="supplier_phone" value="{{ stock_document_form_data.get('supplier_phone', '') }}" placeholder="+380...">
-                    </label>
-                    <label class="field">
-                        <span>Supplier email</span>
-                        <input type="email" name="supplier_email" value="{{ stock_document_form_data.get('supplier_email', '') }}" placeholder="supply@example.com">
-                    </label>
-                    <label class="field field-full">
-                        <span>Supplier notes</span>
-                        <input type="text" name="supplier_notes" value="{{ stock_document_form_data.get('supplier_notes', '') }}" placeholder="Cold-chain delivery, morning slot, etc.">
-                    </label>
-                    <label class="field field-full">
-                        <span>Document note</span>
-                        <textarea name="note" rows="3" placeholder="Optional comment for this document">{{ stock_document_form_data.get('note', '') }}</textarea>
-                    </label>
-                </div>
-
-                <div class="table-shell">
-                    <table class="data-table">
-                        <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>Unit</th>
-                            <th>Sell price</th>
-                            <th>Purchase price</th>
-                            <th>Qty / count</th>
-                            <th>Batch</th>
-                            <th>Serial</th>
-                            <th>Expires</th>
-                            <th>Note</th>
-                        </tr>
-                        </thead>
-                        <tbody id="stock-document-rows">
-                        {% for row in stock_document_rows %}
-                            <tr>
-                                <td><input type="text" name="doc_name" value="{{ row.name }}" placeholder="Salmon fillet"></td>
-                                <td><input type="text" name="doc_unit" value="{{ row.unit or 'kg' }}" placeholder="kg"></td>
-                                <td><input type="number" step="0.01" min="0.01" name="doc_sale_unit_price" value="{{ row.sale_unit_price or '' }}" placeholder="390.00"></td>
-                                <td><input type="number" step="0.01" min="0.01" name="doc_purchase_unit_price" value="{{ row.purchase_unit_price or '' }}" placeholder="290.00"></td>
-                                <td><input type="number" step="0.001" name="doc_quantity_value" value="{{ row.quantity_value or '' }}" placeholder="+5.000 / -1.250 / 12.000"></td>
-                                <td><input type="text" name="doc_batch_code" value="{{ row.batch_code or '' }}" placeholder="BATCH-001"></td>
-                                <td><input type="text" name="doc_serial_code" value="{{ row.serial_code or '' }}" placeholder="Optional"></td>
-                                <td><input type="date" name="doc_expires_at" value="{{ row.expires_at or '' }}"></td>
-                                <td><input type="text" name="doc_note" value="{{ row.note or '' }}" placeholder="Optional"></td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="toolbar-actions">
-                    <button class="secondary-button" type="button" id="stock-document-add-row">Add row</button>
-                    <button class="primary-button" type="submit">Save warehouse document</button>
-                </div>
-
-                <p class="muted-copy">
-                    Receipt uses signed quantity to add stock, adjustment increases or decreases free stock, and inventory count treats the quantity as the actual physical stock on hand for that product.
-                </p>
-                <p class="muted-copy">
-                    Every saved document becomes part of the audit trail with supplier, document date, line history, batch code, serial number, and expiration date.
-                </p>
-            </form>
-        </section>
-
-        <section class="panel">
-            <div class="panel-heading">
-                <h3>Recent warehouse documents</h3>
-                <p>Last saved receipts, adjustments, and inventory counts.</p>
-            </div>
-
-            {% if recent_stock_documents %}
-                <div class="stack-layout">
-                    {% for document in recent_stock_documents %}
-                        <article class="order-card">
-                            <div class="order-card-header">
-                                <div>
-                                    <strong>{{ document.document_number }}</strong>
-                                    <p class="table-subline">
-                                        {{ document.document_type|replace('_', ' ')|title }} · {{ document.document_date }}
-                                        {% if document.supplier_name %}· {{ document.supplier_name }}{% endif %}
-                                    </p>
-                                </div>
-                                <div class="product-badges">
-                                    <span class="status-pill success">{{ document.items|length }} row(s)</span>
-                                </div>
-                            </div>
-                            {% if document.note %}
-                                <p class="muted-copy">{{ document.note }}</p>
-                            {% endif %}
-                            <div class="table-shell">
-                                <table class="data-table">
-                                    <thead>
-                                    <tr>
-                                        <th>Product</th>
-                                        <th>Input qty</th>
-                                        <th>Applied delta</th>
-                                        <th>Purchase</th>
-                                        <th>Batch</th>
-                                        <th>Expires</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {% for item in document.items %}
-                                        <tr>
-                                            <td>{{ item.product_name }}</td>
-                                            <td>{{ item.quantity_value|quantity }} {{ item.unit }}</td>
-                                            <td>{{ item.applied_delta|quantity }} {{ item.unit }}</td>
-                                            <td>{% if item.purchase_unit_price is not none %}{{ item.purchase_unit_price|money }}{% else %}—{% endif %}</td>
-                                            <td>{{ item.batch_code or item.serial_code or '—' }}</td>
-                                            <td>{{ item.expires_at or '—' }}</td>
-                                        </tr>
-                                    {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </article>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <article class="empty-card slim">
-                    <h3>No warehouse documents yet</h3>
-                    <p>The first saved receipt or correction will appear here.</p>
-                </article>
-            {% endif %}
-        </section>
-
-        <section class="panel">
-            <div class="panel-heading">
-                <h3>Create product card</h3>
-                <p>Create a catalog card first if you want a clean public listing. Stock can still arrive later through warehouse documents.</p>
+                <h3>{{ p.create_title }}</h3>
+                <p>{{ p.create_copy }}</p>
             </div>
 
             {% if create_error %}
@@ -306,47 +237,49 @@
                 <input type="hidden" name="search" value="{{ search }}">
                 <input type="hidden" name="active_filter" value="{{ active_filter }}">
                 <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                <input type="hidden" name="category_filter" value="{{ category_filter }}">
+                <input type="hidden" name="page" value="{{ page }}">
                 <input type="hidden" name="selected_product_id" value="{{ selected_product_id or '' }}">
                 <input type="hidden" name="available_quantity" value="{{ create_form_data.get('available_quantity', '0.000') }}">
 
                 <div class="form-grid two-columns">
                     <label class="field">
-                        <span>Name</span>
+                        <span>{{ p.name }}</span>
                         <input type="text" name="name" value="{{ create_form_data.get('name', '') }}" required>
                     </label>
                     <label class="field">
-                        <span>Unit</span>
+                        <span>{{ p.unit }}</span>
                         <input type="text" name="unit" value="{{ create_form_data.get('unit', 'kg') }}" required>
                     </label>
                     <label class="field">
-                        <span>Selling price</span>
+                        <span>{{ p.selling_price }}</span>
                         <input type="number" step="0.01" min="0.01" name="base_unit_price" value="{{ create_form_data.get('base_unit_price', '') }}" required>
                     </label>
                     <label class="field">
-                        <span>Initial free stock</span>
+                        <span>{{ p.initial_free_stock }}</span>
                         <input type="number" step="0.001" min="0" name="available_quantity_preview" value="{{ create_form_data.get('available_quantity', '0.000') }}" disabled>
                     </label>
                     <label class="field field-full">
-                        <span>Image URL</span>
+                        <span>{{ p.image_url }}</span>
                         <input type="url" name="image_url" value="{{ create_form_data.get('image_url', '') }}" placeholder="https://...">
                     </label>
                     <label class="field field-full">
-                        <span>Description</span>
+                        <span>{{ p.description }}</span>
                         <textarea name="description" rows="4">{{ create_form_data.get('description', '') }}</textarea>
                     </label>
                 </div>
 
                 <p class="muted-copy">
-                    Use the warehouse document above for audited stock movement. This form is mainly for catalog data and selling price.
+                    {{ p.audit_note }}
                 </p>
 
                 <label class="toggle-field">
                     <input type="checkbox" name="is_active" value="true" {% if create_form_data.get('is_active', True) %}checked{% endif %}>
-                    <span>Show product in the active catalog</span>
+                    <span>{{ p.show_in_catalog }}</span>
                 </label>
 
                 <div class="toolbar-actions">
-                    <button class="primary-button" type="submit">Create product</button>
+                    <button class="primary-button" type="submit">{{ p.create_product }}</button>
                 </div>
             </form>
         </section>
@@ -354,43 +287,50 @@
         <section class="panel">
             {% if selected_product %}
                 <div class="panel-heading">
-                    <h3>Edit product</h3>
-                    <p>Update the customer-facing card while keeping stock movement in warehouse documents.</p>
+                    <h3>{{ p.edit_title }}</h3>
+                    <p>{{ p.edit_copy }}</p>
                 </div>
 
                 {% if edit_error %}
                     <div class="banner danger">{{ edit_error }}</div>
+                {% endif %}
+                {% if adjust_stock_error %}
+                    <div class="banner danger">{{ adjust_stock_error }}</div>
                 {% endif %}
 
                 <div class="product-preview-shell">
                     {% if selected_product.image_url %}
                         <img class="product-preview" src="{{ selected_product.image_url }}" alt="{{ selected_product.name }}">
                     {% else %}
-                        <div class="product-preview placeholder">No image preview</div>
+                        <div class="product-preview placeholder">{{ p.no_image }}</div>
                     {% endif %}
 
                     <div class="product-preview-meta">
                         <h4>{{ selected_product.name }}</h4>
                         <p class="muted-copy">SKU {{ selected_product.sku }}</p>
-                        <p class="muted-copy">Updated {{ selected_product.updated_at|datetime }}</p>
+                        <p class="muted-copy">{{ p.updated }} {{ selected_product.updated_at|datetime }}</p>
                     </div>
                 </div>
 
                 <div class="stats-grid">
                     <article class="stat-card">
-                        <span class="stat-label">Free stock</span>
+                        <span class="stat-label">{{ p.free_stock }}</span>
                         <strong>{{ selected_product.available_quantity|quantity }} {{ selected_product.unit }}</strong>
                     </article>
                     <article class="stat-card">
-                        <span class="stat-label">Reserved</span>
+                        <span class="stat-label">{{ p.reserved }}</span>
                         <strong>{{ selected_product.reserved_quantity|quantity }} {{ selected_product.unit }}</strong>
                     </article>
                     <article class="stat-card">
-                        <span class="stat-label">On hand</span>
+                        <span class="stat-label">{{ p.on_hand }}</span>
                         <strong>{{ selected_product.stock_on_hand|quantity }} {{ selected_product.unit }}</strong>
                     </article>
                     <article class="stat-card">
-                        <span class="stat-label">Last purchase</span>
+                        <span class="stat-label">{{ p.last_purchase_date }}</span>
+                        <strong>{% if selected_product.last_purchase_at %}{{ selected_product.last_purchase_at }}{% else %}—{% endif %}</strong>
+                    </article>
+                    <article class="stat-card">
+                        <span class="stat-label">{{ p.last_purchase_price }}</span>
                         <strong>{% if selected_product.last_purchase_price is not none %}{{ selected_product.last_purchase_price|money }}{% else %}—{% endif %}</strong>
                     </article>
                 </div>
@@ -399,48 +339,108 @@
                     <input type="hidden" name="search" value="{{ search }}">
                     <input type="hidden" name="active_filter" value="{{ active_filter }}">
                     <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
-                    <input type="hidden" name="available_quantity" value="{{ selected_product.available_quantity }}">
+                    <input type="hidden" name="category_filter" value="{{ category_filter }}">
+                    <input type="hidden" name="page" value="{{ page }}">
 
                     <div class="form-grid two-columns">
                         <label class="field">
-                            <span>Name</span>
+                            <span>{{ p.name }}</span>
                             <input type="text" name="name" value="{{ edit_values.get('name', selected_product.name) }}" required>
                         </label>
                         <label class="field">
-                            <span>Unit</span>
+                            <span>{{ p.unit }}</span>
                             <input type="text" name="unit" value="{{ edit_values.get('unit', selected_product.unit) }}" required>
                         </label>
                         <label class="field">
-                            <span>Selling price</span>
+                            <span>{{ p.selling_price }}</span>
                             <input type="number" step="0.01" min="0.01" name="base_unit_price" value="{{ edit_values.get('base_unit_price', selected_product.base_unit_price) }}" required>
                         </label>
                         <label class="field">
-                            <span>Free stock</span>
+                            <span>{{ p.current_free_stock }}</span>
                             <input type="number" step="0.001" min="0" value="{{ selected_product.available_quantity }}" disabled>
                         </label>
                         <label class="field field-full">
-                            <span>Image URL</span>
+                            <span>{{ p.image_url }}</span>
                             <input type="url" name="image_url" value="{{ edit_values.get('image_url', selected_product.image_url or '') }}" placeholder="https://...">
                         </label>
                         <label class="field field-full">
-                            <span>Description</span>
+                            <span>{{ p.description }}</span>
                             <textarea name="description" rows="4">{{ edit_values.get('description', selected_product.description or '') }}</textarea>
                         </label>
                     </div>
 
                     <label class="toggle-field">
                         <input type="checkbox" name="is_active" value="true" {% if edit_values.get('is_active', selected_product.is_active) %}checked{% endif %}>
-                        <span>Product is active in the customer catalog</span>
+                        <span>{{ p.catalog_active }}</span>
                     </label>
 
                     <div class="toolbar-actions">
-                        <button class="primary-button" type="submit">Save changes</button>
+                        <button class="primary-button" type="submit">{{ p.save_product }}</button>
+                    </div>
+                </form>
+
+                <form method="post" action="{{ url_for('admin_product_adjust_stock_action', product_id=selected_product.id) }}" class="stack-form">
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="active_filter" value="{{ active_filter }}">
+                    <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                    <input type="hidden" name="category_filter" value="{{ category_filter }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+
+                    <div class="panel-heading">
+                        <h3>{{ p.quick_correction }}</h3>
+                        <p>{{ p.quick_correction_copy }}</p>
+                    </div>
+
+                    <div class="form-grid two-columns">
+                        <label class="field">
+                            <span>{{ p.target_free_stock }}</span>
+                            <input
+                                type="number"
+                                step="0.001"
+                                name="target_available_quantity"
+                                value="{{ adjust_values.get('target_available_quantity', selected_product.available_quantity) }}"
+                                required
+                            >
+                        </label>
+                        <label class="field">
+                            <span>{{ p.reason_note }}</span>
+                            <input type="text" name="note" value="{{ adjust_values.get('note', '') }}" placeholder="{{ p.reason_placeholder }}">
+                        </label>
+                    </div>
+
+                    <div class="toolbar-actions">
+                        <button class="secondary-button" type="submit">{{ p.apply_stock_correction }}</button>
+                        <a class="secondary-button" href="{{ stock_documents_url }}">{{ p.open_full_stock_documents }}</a>
+                    </div>
+                </form>
+
+                <form method="post" action="{{ url_for('admin_product_delete_action', product_id=selected_product.id) }}" class="stack-form danger-zone">
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="active_filter" value="{{ active_filter }}">
+                    <input type="hidden" name="stock_filter" value="{{ stock_filter }}">
+                    <input type="hidden" name="category_filter" value="{{ category_filter }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+
+                    <div class="panel-heading">
+                        <h3>{{ 'Видалити товар' if ui_lang == 'uk' else 'Delete product' }}</h3>
+                        <p>
+                            {{ 'Використовуйте цю дію для ручного прибирання дубля або помилково створеної позиції. Причина обов’язкова й потрапить у журнал сервера.' if ui_lang == 'uk' else 'Use this action to remove a duplicate or an accidentally created catalog card. A reason is required and will be written to the server log.' }}
+                        </p>
+                    </div>
+
+                    <label class="field">
+                        <span>{{ 'Причина видалення' if ui_lang == 'uk' else 'Deletion reason' }}</span>
+                        <textarea name="delete_reason" rows="3" required placeholder="{{ 'Наприклад: дублікат після імпорту, помилкова картка товару...' if ui_lang == 'uk' else 'For example: duplicate after import, product card created by mistake...' }}"></textarea>
+                    </label>
+
+                    <div class="toolbar-actions">
+                        <button class="danger-button" type="submit">{{ 'Видалити товар' if ui_lang == 'uk' else 'Delete product' }}</button>
                     </div>
                 </form>
 
                 <div class="panel-heading">
-                    <h3>Batch traceability</h3>
-                    <p>Physical stock that currently sits on the warehouse shelf.</p>
+                    <h3>{{ p.batch_traceability }}</h3>
+                    <p>{{ p.batch_traceability_copy }}</p>
                 </div>
 
                 {% if selected_product_batches %}
@@ -448,14 +448,14 @@
                         <table class="data-table">
                             <thead>
                             <tr>
-                                <th>Batch</th>
-                                <th>Serial</th>
-                                <th>Supplier</th>
-                                <th>Purchase</th>
-                                <th>Available</th>
-                                <th>Original</th>
-                                <th>Expires</th>
-                                <th>Document</th>
+                                <th>{{ p.batch }}</th>
+                                <th>{{ p.serial }}</th>
+                                <th>{{ p.supplier }}</th>
+                                <th>{{ p.purchase }}</th>
+                                <th>{{ p.available }}</th>
+                                <th>{{ p.original }}</th>
+                                <th>{{ p.expires }}</th>
+                                <th>{{ p.document }}</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -468,7 +468,7 @@
                                     <td>{{ batch.available_quantity|quantity }} {{ selected_product.unit }}</td>
                                     <td>{{ batch.original_quantity|quantity }} {{ selected_product.unit }}</td>
                                     <td>{{ batch.expires_at or '—' }}</td>
-                                    <td>{{ batch.document_number or 'Opening balance' }}</td>
+                                    <td>{{ batch.document_number or ('Початковий залишок' if ui_lang == 'uk' else 'Opening balance') }}</td>
                                 </tr>
                             {% endfor %}
                             </tbody>
@@ -476,46 +476,17 @@
                     </div>
                 {% else %}
                     <article class="empty-card slim">
-                        <h3>No batches recorded yet</h3>
-                        <p>The next warehouse document for this product will create a tracked batch automatically.</p>
+                        <h3>{{ 'Партії ще не зафіксовані' if ui_lang == 'uk' else 'No batches recorded yet' }}</h3>
+                        <p>{{ 'Наступна накладна для цього товару автоматично створить відстежувану партію.' if ui_lang == 'uk' else 'The next invoice for this product will create a tracked batch automatically.' }}</p>
                     </article>
                 {% endif %}
             {% else %}
                 <article class="empty-card">
-                    <h3>Select a product</h3>
-                    <p>Open a product from the library to inspect its current stock, batch trail, and customer-facing data.</p>
+                    <h3>{{ 'Оберіть товар' if ui_lang == 'uk' else 'Select a product' }}</h3>
+                    <p>{{ 'Відкрийте товар зі списку, щоб переглянути залишки, швидкі коригування, дані про останню закупівлю та історію партій.' if ui_lang == 'uk' else 'Open a product from the library to inspect current stock, quick corrections, last purchase details, and batch history.' }}</p>
                 </article>
             {% endif %}
         </section>
     </div>
 </section>
-{% endblock %}
-
-{% block scripts %}
-    {{ super() }}
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const addRowButton = document.getElementById("stock-document-add-row");
-            const rowsContainer = document.getElementById("stock-document-rows");
-            if (!addRowButton || !rowsContainer) {
-                return;
-            }
-
-            addRowButton.addEventListener("click", () => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td><input type="text" name="doc_name" placeholder="Salmon fillet"></td>
-                    <td><input type="text" name="doc_unit" value="kg" placeholder="kg"></td>
-                    <td><input type="number" step="0.01" min="0.01" name="doc_sale_unit_price" placeholder="390.00"></td>
-                    <td><input type="number" step="0.01" min="0.01" name="doc_purchase_unit_price" placeholder="290.00"></td>
-                    <td><input type="number" step="0.001" name="doc_quantity_value" placeholder="+5.000 / -1.250 / 12.000"></td>
-                    <td><input type="text" name="doc_batch_code" placeholder="BATCH-001"></td>
-                    <td><input type="text" name="doc_serial_code" placeholder="Optional"></td>
-                    <td><input type="date" name="doc_expires_at"></td>
-                    <td><input type="text" name="doc_note" placeholder="Optional"></td>
-                `;
-                rowsContainer.appendChild(row);
-            });
-        });
-    </script>
 {% endblock %}

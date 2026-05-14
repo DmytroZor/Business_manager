@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 from typing import Sequence
 
@@ -23,6 +24,85 @@ from manage.services import inventory_service
 
 
 LOW_STOCK_THRESHOLD = Decimal("5.000")
+logger = logging.getLogger("bms.product")
+PRODUCT_CATEGORY_FILTERS: dict[str, tuple[str, ...]] = {
+    "fish": (
+        "сібас",
+        "дорадо",
+        "лосос",
+        "форел",
+        "скумбр",
+        "оселед",
+        "тунец",
+        "тунець",
+        "палтус",
+        "тріск",
+        "треск",
+        "хек",
+        "минтай",
+        "камбал",
+        "сардин",
+        "ставрид",
+        "кефаль",
+        "корюш",
+        "барабуль",
+        "окун",
+        "сом",
+        "щук",
+        "судак",
+        "sea bass",
+        "salmon",
+        "trout",
+        "mackerel",
+        "tuna",
+        "cod",
+        "halibut",
+        "herring",
+    ),
+    "seafood": (
+        "кревет",
+        "міді",
+        "мидии",
+        "кальмар",
+        "восьмин",
+        "гребінец",
+        "гребенец",
+        "устриц",
+        "краб",
+        "лангуст",
+        "рак",
+        "ікра",
+        "икра",
+        "морепродукт",
+        "рапан",
+        "shrimp",
+        "mussel",
+        "squid",
+        "octopus",
+        "oyster",
+        "crab",
+        "seafood",
+        "scallop",
+    ),
+    "frozen": (
+        "морож",
+        "заморож",
+        "frozen",
+        "half shell",
+        "кільця",
+        "rings",
+        "очищен",
+        "cleaned",
+        "котлет",
+        "фарш",
+        "коктейл",
+        "cocktail",
+        "стейк",
+        "steak",
+        "філе",
+        "филе",
+    ),
+}
 
 
 def _base_product_query():
@@ -61,6 +141,28 @@ def _apply_search(stmt, search: str | None):
     )
 
 
+def _apply_category_filter(stmt, category_filter: str | None):
+    if not category_filter or category_filter == "all":
+        return stmt
+
+    keywords = PRODUCT_CATEGORY_FILTERS.get(category_filter)
+    if not keywords:
+        return stmt
+
+    category_conditions = []
+    for keyword in keywords:
+        like_term = f"%{keyword}%"
+        category_conditions.append(Product.name.ilike(like_term) | Product.description.ilike(like_term))
+
+    if not category_conditions:
+        return stmt
+
+    condition = category_conditions[0]
+    for extra_condition in category_conditions[1:]:
+        condition = condition | extra_condition
+    return stmt.where(condition)
+
+
 async def create_product(db: AsyncSession, product_data: ProductCreate):
     product = Product(
         name=product_data.name,
@@ -83,9 +185,11 @@ async def create_product(db: AsyncSession, product_data: ProductCreate):
         return product
     except IntegrityError as exc:
         await db.rollback()
+        logger.exception("Product creation failed because of SKU conflict for name=%s unit=%s", product_data.name, product_data.unit)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Product with this SKU already exists") from exc
     except SQLAlchemyError as exc:
         await db.rollback()
+        logger.exception("Database error while creating product name=%s unit=%s", product_data.name, product_data.unit)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error while creating product",
@@ -116,12 +220,14 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
         await db.refresh(product)
     except IntegrityError as exc:
         await db.rollback()
+        logger.exception("Product update violates unique constraint for product_id=%s", product_id)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Product update violates a unique constraint",
         ) from exc
     except SQLAlchemyError as exc:
         await db.rollback()
+        logger.exception("Database error while updating product_id=%s", product_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error while updating product",
@@ -130,16 +236,43 @@ async def product_update_by_id(db: AsyncSession, product_id: int, product_data: 
     return product
 
 
-async def product_delete_by_id(db: AsyncSession, product_id: int):
+async def product_delete_by_id(
+    db: AsyncSession,
+    product_id: int,
+    *,
+    reason: str,
+    actor_user_id: int | None = None,
+):
     product = await get_product_by_id(db, product_id)
     if not product:
         return False
+
+    clean_reason = reason.strip()
+    if not clean_reason:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deletion reason is required")
+
+    reserved_quantity = Decimal(str(product.reserved_quantity or 0))
+    if reserved_quantity > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete a product that still has reserved quantity",
+        )
+
+    logger.warning(
+        "Deleting product id=%s sku=%s name=%s actor_user_id=%s reason=%s",
+        product.id,
+        product.sku,
+        product.name,
+        actor_user_id,
+        clean_reason,
+    )
     await db.delete(product)
     try:
         await db.commit()
         return True
     except SQLAlchemyError as exc:
         await db.rollback()
+        logger.exception("Database error while deleting product_id=%s", product_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error while deleting product",
@@ -155,12 +288,38 @@ async def apply_stock_document(
     return await inventory_service.apply_stock_document(db, payload, actor_user_id=actor_user_id)
 
 
-async def list_recent_stock_documents(db: AsyncSession, *, limit: int = 10):
-    return await inventory_service.list_recent_stock_documents(db, limit=limit)
+async def list_recent_stock_documents(
+    db: AsyncSession,
+    *,
+    limit: int = 10,
+    days_back: int | None = None,
+):
+    return await inventory_service.list_recent_stock_documents(db, limit=limit, days_back=days_back)
+
+
+async def get_stock_document_by_id(db: AsyncSession, document_id: int):
+    return await inventory_service.get_stock_document_by_id(db, document_id)
+
+
+async def get_next_receipt_document_number(db: AsyncSession, *, document_date):
+    return await inventory_service.get_next_receipt_document_number(db, document_date=document_date)
 
 
 async def get_product_batches(db: AsyncSession, product_id: int, *, limit: int = 20):
     return await inventory_service.get_product_batches(db, product_id, limit=limit)
+
+
+async def list_products_for_reference(
+    db: AsyncSession,
+    *,
+    include_inactive: bool = True,
+    limit: int = 500,
+) -> Sequence[Product]:
+    stmt = select(Product).order_by(Product.is_active.desc(), Product.name.asc(), Product.id.asc()).limit(limit)
+    if not include_inactive:
+        stmt = stmt.where(Product.is_active.is_(True))
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def get_all_products(
@@ -173,11 +332,13 @@ async def get_all_products(
     *,
     search: str | None = None,
     stock_status: StockStatus = StockStatus.all_products,
+    category_filter: str | None = None,
 ) -> Sequence[Product]:
     stmt = _base_product_query()
     stmt = _apply_active_filter(stmt, active_status)
     stmt = _apply_stock_filter(stmt, stock_status)
     stmt = _apply_search(stmt, search)
+    stmt = _apply_category_filter(stmt, category_filter)
 
     sort_col = getattr(Product, sort_field.value)
     if sort_order == SortOrder.desc:
@@ -188,3 +349,20 @@ async def get_all_products(
     stmt = stmt.offset(offset).limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+async def count_products(
+    db: AsyncSession,
+    *,
+    active_status: ActiveStatus,
+    search: str | None = None,
+    stock_status: StockStatus = StockStatus.all_products,
+    category_filter: str | None = None,
+) -> int:
+    stmt = select(func.count(Product.id))
+    stmt = _apply_active_filter(stmt, active_status)
+    stmt = _apply_stock_filter(stmt, stock_status)
+    stmt = _apply_search(stmt, search)
+    stmt = _apply_category_filter(stmt, category_filter)
+    result = await db.execute(stmt)
+    return int(result.scalar_one() or 0)

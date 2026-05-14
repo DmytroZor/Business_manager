@@ -6,21 +6,41 @@ from core.time_utils import format_kyiv_datetime
 
 
 ORDER_STATUS_LABELS = {
-    "draft": "Draft",
-    "placed": "Placed",
-    "paid": "Paid",
-    "preparing": "Preparing",
-    "out_for_delivery": "Out for Delivery",
-    "delivered": "Delivered",
-    "cancelled": "Cancelled",
+    "en": {
+        "draft": "Draft",
+        "placed": "Placed",
+        "paid": "Paid",
+        "preparing": "Preparing",
+        "out_for_delivery": "Out for Delivery",
+        "delivered": "Delivered",
+        "cancelled": "Cancelled",
+    },
+    "uk": {
+        "draft": "Чернетка",
+        "placed": "Оформлено",
+        "paid": "Оплачено",
+        "preparing": "Готується",
+        "out_for_delivery": "Передано в доставку",
+        "delivered": "Доставлено",
+        "cancelled": "Скасовано",
+    },
 }
 
 DELIVERY_STATUS_LABELS = {
-    "pending": "Pending",
-    "assigned": "Assigned",
-    "picked_up": "Picked Up",
-    "delivered": "Delivered",
-    "failed": "Failed",
+    "en": {
+        "pending": "Pending",
+        "assigned": "Assigned",
+        "picked_up": "Picked Up",
+        "delivered": "Delivered",
+        "failed": "Failed",
+    },
+    "uk": {
+        "pending": "Очікує",
+        "assigned": "Призначено",
+        "picked_up": "Забрано",
+        "delivered": "Доставлено",
+        "failed": "Не вдалося",
+    },
 }
 
 
@@ -34,14 +54,24 @@ def titleize(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
 
-def order_status_label(value) -> str:
+def order_status_label_for_lang(value, lang: str = "uk") -> str:
     raw = enum_value(value)
-    return ORDER_STATUS_LABELS.get(raw, titleize(raw))
+    labels = ORDER_STATUS_LABELS.get(lang, ORDER_STATUS_LABELS["en"])
+    return labels.get(raw, titleize(raw))
+
+
+def delivery_status_label_for_lang(value, lang: str = "uk") -> str:
+    raw = enum_value(value)
+    labels = DELIVERY_STATUS_LABELS.get(lang, DELIVERY_STATUS_LABELS["en"])
+    return labels.get(raw, titleize(raw))
+
+
+def order_status_label(value) -> str:
+    return order_status_label_for_lang(value, "uk")
 
 
 def delivery_status_label(value) -> str:
-    raw = enum_value(value)
-    return DELIVERY_STATUS_LABELS.get(raw, titleize(raw))
+    return delivery_status_label_for_lang(value, "uk")
 
 
 def money(value) -> str:

@@ -25,7 +25,7 @@ async def test_get_customer_by_user_id_not_found():
         await order_service.get_customer_by_user_id(db, user_id=10)
 
     assert exc.value.status_code == 400
-    assert "Customer profile not found" in exc.value.detail
+    assert "Профіль покупця не знайдено" in exc.value.detail
 
 
 @pytest.mark.asyncio

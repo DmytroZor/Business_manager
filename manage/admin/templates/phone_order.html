@@ -3,9 +3,9 @@
 {% block content %}
 <section class="page-header">
     <div>
-        <p class="eyebrow">Phone order desk</p>
-        <h2>Create a phone order</h2>
-        <p class="page-copy">Capture the customer, address, and items in one form instead of walking through Telegram messages. Orders can be placed today, while customer-facing delivery messaging explains that delivery runs the next day.</p>
+        <p class="eyebrow">{{ ui_t.phone_order.eyebrow }}</p>
+        <h2>{{ ui_t.phone_order.title }}</h2>
+        <p class="page-copy">{{ ui_t.phone_order["copy"] }}</p>
     </div>
 </section>
 
@@ -16,20 +16,20 @@
 
     <section class="panel">
         <div class="panel-heading">
-            <h3>Customer</h3>
-            <p>Used to link an existing customer or create a new one.</p>
+            <h3>{{ ui_t.phone_order.customer }}</h3>
+            <p>{{ ui_t.phone_order.customer_copy }}</p>
         </div>
         <div class="form-grid two-columns">
             <label class="field">
-                <span>Full name</span>
+                <span>{{ ui_t.phone_order.full_name }}</span>
                 <input type="text" name="customer_full_name" value="{{ form_data.get('customer_full_name', '') }}" required>
             </label>
             <label class="field">
-                <span>Phone number</span>
+                <span>{{ ui_t.phone_order.phone_number }}</span>
                 <input type="text" name="customer_phone_number" value="{{ form_data.get('customer_phone_number', '') }}" placeholder="+380..." required>
             </label>
             <label class="field">
-                <span>Email</span>
+                <span>{{ ui_t.phone_order.email }}</span>
                 <input type="email" name="customer_email" value="{{ form_data.get('customer_email', '') }}">
             </label>
         </div>
@@ -37,24 +37,24 @@
 
     <section class="panel">
         <div class="panel-heading">
-            <h3>Delivery address</h3>
-            <p>This address will be reused if the same customer and location already exist.</p>
+            <h3>{{ ui_t.phone_order.delivery_address }}</h3>
+            <p>{{ ui_t.phone_order.delivery_address_copy }}</p>
         </div>
         <div class="form-grid two-columns">
             <label class="field">
-                <span>Street</span>
+                <span>{{ ui_t.phone_order.street }}</span>
                 <input type="text" name="street" value="{{ form_data.get('street', '') }}" required>
             </label>
             <label class="field">
-                <span>Building</span>
+                <span>{{ ui_t.phone_order.building }}</span>
                 <input type="text" name="building" value="{{ form_data.get('building', '') }}" required>
             </label>
             <label class="field">
-                <span>Apartment / office</span>
+                <span>{{ ui_t.phone_order.apartment }}</span>
                 <input type="text" name="apartment" value="{{ form_data.get('apartment', '') }}">
             </label>
             <label class="field field-full">
-                <span>Address notes</span>
+                <span>{{ ui_t.phone_order.address_notes }}</span>
                 <textarea name="address_notes" rows="3">{{ form_data.get('address_notes', '') }}</textarea>
             </label>
         </div>
@@ -62,17 +62,17 @@
 
     <section class="panel">
         <div class="panel-heading">
-            <h3>Items</h3>
-            <p>Add one or more products with quantity. Use decimal quantities if needed.</p>
+            <h3>{{ ui_t.phone_order["items"] }}</h3>
+            <p>{{ ui_t.phone_order.items_copy }}</p>
         </div>
 
         <div id="phone-order-items" class="stack-layout compact">
             {% for item in items %}
                 <div class="order-item-row">
                     <label class="field grow">
-                        <span>Product</span>
+                        <span>{{ ui_t.phone_order.product }}</span>
                         <select name="product_id" required>
-                            <option value="">Select product</option>
+                            <option value="">{{ ui_t.phone_order.select_product }}</option>
                             {% for product in products %}
                                 <option
                                     value="{{ product.id }}"
@@ -85,11 +85,11 @@
                     </label>
 
                     <label class="field quantity-field">
-                        <span>Quantity</span>
-                        <input type="text" name="quantity" value="{{ item.quantity }}" placeholder="1 or 1.5" required>
+                        <span>{{ ui_t.phone_order.quantity }}</span>
+                        <input type="text" name="quantity" value="{{ item.quantity }}" placeholder="{{ ui_t.phone_order.quantity_placeholder }}" required>
                     </label>
 
-                    <button class="icon-button" type="button" data-remove-item>Remove</button>
+                    <button class="icon-button" type="button" data-remove-item>{{ ui_t.phone_order.remove }}</button>
                 </div>
             {% endfor %}
         </div>
@@ -97,9 +97,9 @@
         <template id="order-item-template">
             <div class="order-item-row">
                 <label class="field grow">
-                    <span>Product</span>
+                    <span>{{ ui_t.phone_order.product }}</span>
                     <select name="product_id" required>
-                        <option value="">Select product</option>
+                        <option value="">{{ ui_t.phone_order.select_product }}</option>
                         {% for product in products %}
                             <option value="{{ product.id }}">
                                 {{ product.name }} · {{ product.base_unit_price|money }} / {{ product.unit }}
@@ -109,31 +109,31 @@
                 </label>
 
                 <label class="field quantity-field">
-                    <span>Quantity</span>
-                    <input type="text" name="quantity" placeholder="1 or 1.5" required>
+                    <span>{{ ui_t.phone_order.quantity }}</span>
+                    <input type="text" name="quantity" placeholder="{{ ui_t.phone_order.quantity_placeholder }}" required>
                 </label>
 
-                <button class="icon-button" type="button" data-remove-item>Remove</button>
+                <button class="icon-button" type="button" data-remove-item>{{ ui_t.phone_order.remove }}</button>
             </div>
         </template>
 
-        <button class="secondary-button" type="button" data-add-item>Add another item</button>
+        <button class="secondary-button" type="button" data-add-item>{{ ui_t.phone_order.add_item }}</button>
     </section>
 
     <section class="panel">
         <div class="panel-heading">
-            <h3>Order note</h3>
-            <p>Optional internal or customer note for the order.</p>
+            <h3>{{ ui_t.phone_order.order_note }}</h3>
+            <p>{{ ui_t.phone_order.order_note_copy }}</p>
         </div>
         <label class="field field-full">
-            <span>Note</span>
+            <span>{{ ui_t.phone_order.note }}</span>
             <textarea name="note" rows="4">{{ form_data.get('note', '') }}</textarea>
         </label>
     </section>
 
     <div class="toolbar-actions">
-        <button class="primary-button" type="submit">Create phone order</button>
-        <a class="secondary-button" href="{{ url_for('admin_orders_dashboard') }}">Back to orders</a>
+        <button class="primary-button" type="submit">{{ ui_t.phone_order.submit }}</button>
+        <a class="secondary-button" href="{{ url_for('admin_orders_dashboard') }}">{{ ui_t.phone_order.back }}</a>
     </div>
 </form>
 {% endblock %}

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_db
+from core.models import UserRole
 from manage.docs.api_docs import ERROR_RESPONSES, PRODUCT_DOCS
 from manage.schemas.product_schema import (
     ActiveStatus,
@@ -14,10 +15,16 @@ from manage.schemas.product_schema import (
     SortOrder,
     StockStatus,
 )
-from manage.services import product_service
+from manage.schemas.analytics_schema import ProductSalesAnalyticsOut, SalesAnalyticsPeriod, SalesAnalyticsSort
+from manage.services import analytics_service, product_service
 from routers.user_router import get_current_user
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+
+def _ensure_admin_role(current_user) -> None:
+    if getattr(current_user, "role", None) != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
 @router.get(
@@ -115,3 +122,35 @@ async def update_product(
     if not updated:
         raise HTTPException(status_code=404, detail="Product not found")
     return updated
+
+
+@router.get(
+    "/admin/sales-analytics",
+    response_model=ProductSalesAnalyticsOut,
+    status_code=200,
+    summary="Admin: product sales analytics",
+    description="Returns aggregated product sales for the selected period.",
+)
+async def get_admin_product_sales_analytics(
+    period: SalesAnalyticsPeriod = SalesAnalyticsPeriod.month,
+    sort_by: SalesAnalyticsSort = SalesAnalyticsSort.quantity,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ensure_admin_role(current_user)
+    result = await analytics_service.get_product_sales_analytics(
+        db,
+        period=period,
+        sort_by=sort_by,
+        limit=limit,
+    )
+    return ProductSalesAnalyticsOut(
+        period=result.period,
+        sort_by=result.sort_by,
+        generated_at=result.generated_at,
+        period_start=result.period_start,
+        period_end=result.period_end,
+        summary=result.summary,
+        items=result.items,
+    )

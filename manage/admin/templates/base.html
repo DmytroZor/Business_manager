@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang if ui_lang is defined else 'en' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,33 +14,48 @@
         <aside class="sidebar">
             <div class="brand-block">
                 <p class="eyebrow">BusinessManageSystem</p>
-                <h1>Admin Console</h1>
-                <p class="brand-copy">Dispatch, phone orders, and order operations in one place.</p>
+                <h1>{{ base_t.brand_title if base_t is defined else 'Admin Console' }}</h1>
+                <p class="brand-copy">{{ base_t.brand_copy if base_t is defined else 'Dispatch, phone orders, and order operations in one place.' }}</p>
             </div>
 
             <nav class="sidebar-nav">
                 <a href="{{ url_for('admin_orders_dashboard') }}" class="{% if section == 'orders' %}active{% endif %}">
-                    Orders
+                    {{ base_t.orders if base_t is defined else 'Orders' }}
                 </a>
                 <a href="{{ url_for('admin_phone_order_page') }}" class="{% if section == 'phone-order' %}active{% endif %}">
-                    Phone Order
+                    {{ base_t.phone_order if base_t is defined else 'Phone Order' }}
                 </a>
                 <a href="{{ url_for('admin_products_page') }}" class="{% if section == 'products' %}active{% endif %}">
-                    Products
+                    {{ base_t.products if base_t is defined else 'Products' }}
+                </a>
+                <a href="{{ stock_documents_nav_url if stock_documents_nav_url is defined else url_for('admin_stock_documents_page') }}" class="{% if section == 'stock-documents' %}active{% endif %}">
+                    {{ base_t.stock_documents if base_t is defined else 'Stock Documents' }}
+                </a>
+                <a href="{{ url_for('admin_sales_analytics_page') }}" class="{% if section == 'sales-analytics' %}active{% endif %}">
+                    {{ base_t.sales_analytics if base_t is defined else 'Sales Analytics' }}
                 </a>
                 <a href="{{ url_for('admin_couriers_page') }}" class="{% if section == 'couriers' %}active{% endif %}">
-                    Couriers
+                    {{ base_t.couriers if base_t is defined else 'Couriers' }}
                 </a>
             </nav>
 
             <div class="sidebar-footer">
+                {% if lang_switch_urls is defined %}
+                    <div class="language-switch" aria-label="{{ ui_t.language }}">
+                        <span class="language-switch-label">{{ ui_t.language }}</span>
+                        <div class="language-switch-group">
+                            <a class="language-switch-link {% if lang_switch_urls.active == 'uk' %}is-active{% endif %}" href="{{ lang_switch_urls.uk }}">{{ ui_t.lang_uk }}</a>
+                            <a class="language-switch-link {% if lang_switch_urls.active == 'en' %}is-active{% endif %}" href="{{ lang_switch_urls.en }}">{{ ui_t.lang_en }}</a>
+                        </div>
+                    </div>
+                {% endif %}
                 <div class="admin-chip">
                     <span class="dot"></span>
                     <span>{{ admin_user.full_name }}</span>
                 </div>
-                <a class="muted-link" href="/docs" target="_blank" rel="noreferrer">Open API Docs</a>
+                <a class="muted-link" href="/docs" target="_blank" rel="noreferrer">{{ base_t.open_api_docs if base_t is defined else 'Open API Docs' }}</a>
                 <form method="post" action="{{ url_for('admin_logout_action') }}">
-                    <button class="ghost-button" type="submit">Log out</button>
+                    <button class="ghost-button" type="submit">{{ base_t.logout if base_t is defined else 'Log out' }}</button>
                 </form>
             </div>
         </aside>

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN
+import logging
+import re
 from typing import Sequence
 
 from fastapi import HTTPException, status
@@ -24,10 +26,13 @@ from core.models import (
     Supplier,
 )
 from manage.schemas.product_schema import ProductStockDocumentApply, ProductStockDocumentRow
+from core.time_utils import kyiv_today
 
 
 LEGACY_BATCH_CODE = "opening-balance"
 LOW_STOCK_THRESHOLD = Decimal("5.000")
+logger = logging.getLogger("bms.inventory")
+DOCUMENT_NUMBER_PATTERN = re.compile(r"^(?P<prefix>[A-Z]+)-(?P<date>\d{4}-\d{2}-\d{2})-(?P<seq>\d+)$")
 
 
 @dataclass(slots=True)
@@ -95,6 +100,31 @@ def build_document_number(document_type: StockDocumentType) -> str:
     }
     prefix = prefix_map.get(document_type, "DOC")
     return f"{prefix}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+
+
+def build_receipt_document_number(*, document_date: date, sequence: int) -> str:
+    return f"REC-{document_date.isoformat()}-{sequence:02d}"
+
+
+async def get_next_receipt_document_number(db: AsyncSession, *, document_date: date) -> str:
+    stmt = (
+        select(StockDocument.document_number)
+        .where(StockDocument.document_type == StockDocumentType.RECEIPT)
+        .where(StockDocument.document_date == document_date)
+        .where(StockDocument.document_number.like(f"REC-{document_date.isoformat()}-%"))
+    )
+    result = await db.execute(stmt)
+
+    max_sequence = 0
+    for document_number in result.scalars().all():
+        match = DOCUMENT_NUMBER_PATTERN.match(document_number or "")
+        if not match:
+            continue
+        if match.group("prefix") != "REC" or match.group("date") != document_date.isoformat():
+            continue
+        max_sequence = max(max_sequence, int(match.group("seq")))
+
+    return build_receipt_document_number(document_date=document_date, sequence=max_sequence + 1)
 
 
 async def _get_supplier_for_update(db: AsyncSession, supplier_name: str) -> Supplier | None:
@@ -165,6 +195,11 @@ async def get_products_for_update(db: AsyncSession, product_ids: Sequence[int]) 
     return {product.id: product for product in result.scalars().all()}
 
 
+async def get_product_for_update(db: AsyncSession, product_id: int) -> Product | None:
+    products = await get_products_for_update(db, [product_id])
+    return products.get(product_id)
+
+
 async def _create_product_from_document_row(row: ProductStockDocumentRow) -> Product:
     sale_price = row.sale_unit_price or row.purchase_unit_price
     if sale_price is None:
@@ -196,6 +231,8 @@ async def _create_product_from_document_row(row: ProductStockDocumentRow) -> Pro
 
 
 async def ensure_opening_batch_for_product(db: AsyncSession, product: Product) -> None:
+    if product.id is None:
+        return
     current_total = product_stock_on_hand(product)
     if current_total <= 0:
         return
@@ -382,8 +419,19 @@ async def apply_stock_document(
         db.add(document)
         await db.flush()
 
+        touched_product_ids: set[int] = set()
+
         for row in payload.items:
-            product = await get_product_by_name_and_unit_for_update(db, name=row.name, unit=row.unit)
+            product = None
+            if row.product_id is not None:
+                product = await get_product_for_update(db, row.product_id)
+                if product is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Товар із id={row.product_id} не знайдено.",
+                    )
+            else:
+                product = await get_product_by_name_and_unit_for_update(db, name=row.name, unit=row.unit)
             if product is None:
                 if payload.document_type == StockDocumentType.INVENTORY_COUNT and row.quantity_value == 0:
                     product = None
@@ -393,15 +441,21 @@ async def apply_stock_document(
                     await db.flush()
                     created_count += 1
                     touched_products.append(product)
+                    touched_product_ids.add(product.id)
             else:
                 updated_count += 1
-                touched_products.append(product)
+                if product.id not in touched_product_ids:
+                    touched_products.append(product)
+                    touched_product_ids.add(product.id)
+
+            product_name = row.name if product is None else (row.name or product.name)
+            product_unit = row.unit if product is None else (row.unit or product.unit)
 
             document_item = StockDocumentItem(
                 document_id=document.id,
                 product_id=product.id if product is not None else None,
-                product_name=row.name,
-                unit=row.unit,
+                product_name=product_name,
+                unit=product_unit,
                 quantity_value=quantize_quantity(row.quantity_value),
                 applied_delta=Decimal("0.000"),
                 sale_unit_price=quantize_money(row.sale_unit_price) if row.sale_unit_price is not None else None,
@@ -419,6 +473,9 @@ async def apply_stock_document(
             if product is None:
                 continue
 
+            if row.product_id is not None:
+                product.name = product_name
+                product.unit = product_unit
             if row.sale_unit_price is not None:
                 product.base_unit_price = quantize_money(row.sale_unit_price)
             if row.purchase_unit_price is not None:
@@ -452,6 +509,12 @@ async def apply_stock_document(
 
             document_item.applied_delta = delta
 
+            if delta > 0 and (
+                payload.document_type == StockDocumentType.RECEIPT or row.purchase_unit_price is not None
+            ):
+                if product.last_purchase_at is None or payload.document_date >= product.last_purchase_at:
+                    product.last_purchase_at = payload.document_date
+
             if delta > 0:
                 batch = await _find_or_create_batch_for_increase(
                     db,
@@ -484,6 +547,11 @@ async def apply_stock_document(
         raise
     except IntegrityError as exc:
         await db.rollback()
+        logger.exception(
+            "Warehouse document conflict while saving document_number=%s document_type=%s",
+            payload.document_number or (document.document_number if document is not None else None),
+            payload.document_type.value,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Складський документ не вдалося зберегти через конфлікт даних.",
@@ -491,10 +559,77 @@ async def apply_stock_document(
 
     except SQLAlchemyError as exc:
         await db.rollback()
+        logger.exception(
+            "Database error while saving warehouse document_number=%s document_type=%s",
+            payload.document_number or (document.document_number if document is not None else None),
+            payload.document_type.value,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Помилка бази даних при збереженні складського документа.",
         ) from exc
+
+
+async def list_recent_stock_documents(
+    db: AsyncSession,
+    *,
+    limit: int = 10,
+    days_back: int | None = None,
+) -> list[StockDocument]:
+    stmt = (
+        select(StockDocument)
+        .options(
+            selectinload(StockDocument.supplier),
+            selectinload(StockDocument.created_by_user),
+            selectinload(StockDocument.items),
+        )
+    )
+    if days_back is not None:
+        cutoff_date = kyiv_today() - timedelta(days=max(days_back - 1, 0))
+        stmt = stmt.where(StockDocument.document_date >= cutoff_date)
+
+    stmt = stmt.order_by(
+        StockDocument.document_date.desc(),
+        StockDocument.created_at.desc(),
+        StockDocument.id.desc(),
+    ).limit(limit)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_stock_document_by_id(db: AsyncSession, document_id: int) -> StockDocument | None:
+    stmt = (
+        select(StockDocument)
+        .options(
+            selectinload(StockDocument.supplier),
+            selectinload(StockDocument.created_by_user),
+            selectinload(StockDocument.items),
+        )
+        .where(StockDocument.id == document_id)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def get_product_batches(db: AsyncSession, product_id: int, *, limit: int = 20) -> list[ProductBatch]:
+    stmt = (
+        select(ProductBatch)
+        .options(
+            selectinload(ProductBatch.supplier),
+            selectinload(ProductBatch.stock_document),
+        )
+        .where(ProductBatch.product_id == product_id)
+        .where(ProductBatch.available_quantity > 0)
+        .order_by(
+            ProductBatch.expires_at.is_(None),
+            ProductBatch.expires_at.asc(),
+            ProductBatch.received_at.asc(),
+            ProductBatch.id.asc(),
+        )
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def consume_order_stock_for_pickup(db: AsyncSession, order: Order) -> None:

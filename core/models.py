@@ -183,6 +183,7 @@ class Product(Base):
     image_url = Column(String(500), nullable=True)
     base_unit_price = Column(Numeric(10, 2), nullable=False)  # поточна ціна
     last_purchase_price = Column(Numeric(10, 2), nullable=True)
+    last_purchase_at = Column(Date, nullable=True, index=True)
     unit = Column(String(20), nullable=False, default="kg")
     available_quantity = Column(Numeric(10, 3), nullable=False, default=0)
     reserved_quantity = Column(Numeric(10, 3), nullable=False, default=0)

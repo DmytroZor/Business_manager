@@ -3,35 +3,35 @@
 {% block content %}
 <section class="page-header">
     <div>
-        <p class="eyebrow">Admin IA</p>
-        <h2>Orders and dispatch</h2>
-        <p class="page-copy">Review incoming orders, assign couriers, and handle problem cases without Telegram FSM friction.</p>
+        <p class="eyebrow">{{ ui_t.orders.eyebrow }}</p>
+        <h2>{{ ui_t.orders.title }}</h2>
+        <p class="page-copy">{{ ui_t.orders["copy"] }}</p>
     </div>
 </section>
 
 <section class="stats-grid">
     <article class="stat-card">
-        <span class="stat-label">Open</span>
+        <span class="stat-label">{{ ui_t.orders.open }}</span>
         <strong>{{ stats.get('open', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Placed</span>
+        <span class="stat-label">{{ ui_t.orders.placed }}</span>
         <strong>{{ stats.get('placed', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Preparing</span>
+        <span class="stat-label">{{ ui_t.orders.preparing }}</span>
         <strong>{{ stats.get('preparing', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Out for delivery</span>
+        <span class="stat-label">{{ ui_t.orders.out_for_delivery }}</span>
         <strong>{{ stats.get('out_for_delivery', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Delivered</span>
+        <span class="stat-label">{{ ui_t.orders.delivered }}</span>
         <strong>{{ stats.get('delivered', 0) }}</strong>
     </article>
     <article class="stat-card">
-        <span class="stat-label">Cancelled</span>
+        <span class="stat-label">{{ ui_t.orders.cancelled }}</span>
         <strong>{{ stats.get('cancelled', 0) }}</strong>
     </article>
 </section>
@@ -43,20 +43,20 @@
     action="{{ url_for('admin_orders_dashboard') }}"
 >
     <label class="field grow">
-        <span>Search</span>
+        <span>{{ ui_t.orders.search }}</span>
         <input
             id="orders-search"
             type="text"
             name="search"
             value="{{ search }}"
-            placeholder="Order ID, phone, name, email, street"
+            placeholder="{{ ui_t.orders.search_placeholder }}"
         >
     </label>
 
     <label class="field">
-        <span>Status</span>
+        <span>{{ ui_t.orders.status }}</span>
         <select name="status_filter">
-            <option value="">All statuses</option>
+            <option value="">{{ 'Усі статуси' if ui_lang == 'uk' else 'All statuses' }}</option>
             {% for value, label in order_status_options %}
                 <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -64,7 +64,7 @@
     </label>
 
     <label class="field">
-        <span>Queue view</span>
+        <span>{{ ui_t.orders.queue_view }}</span>
         <select name="queue_filter">
             {% for value, label in order_queue_filter_options %}
                 <option value="{{ value }}" {% if queue_filter == value %}selected{% endif %}>{{ label }}</option>
@@ -73,7 +73,7 @@
     </label>
 
     <label class="field">
-        <span>Placed on</span>
+        <span>{{ ui_t.orders.placed_on }}</span>
         <select name="date_filter">
             {% for value, label in order_date_filter_options %}
                 <option value="{{ value }}" {% if date_filter == value %}selected{% endif %}>{{ label }}</option>
@@ -85,18 +85,18 @@
     <input type="hidden" id="orders-page" name="page" value="{{ page }}">
 
     <div class="toolbar-actions">
-        <button class="primary-button" type="submit">Apply</button>
-        <a class="secondary-button" href="{{ url_for('admin_orders_dashboard') }}">Reset</a>
+        <button class="primary-button" type="submit">{{ ui_t.orders.apply }}</button>
+        <a class="secondary-button" href="{{ url_for('admin_orders_dashboard') }}">{{ ui_t.orders.reset }}</a>
     </div>
 </form>
 
 <section class="workspace-grid">
     <div class="panel list-panel">
         <div class="panel-heading">
-            <h3>Queue</h3>
+            <h3>{{ ui_t.orders.queue }}</h3>
             <p>
-                Showing {{ orders|length }} of {{ total_orders }} matching orders.
-                Queue page {{ page }} of {{ total_pages }}.
+                {{ ui_t.orders.showing }} {{ orders|length }} {{ ui_t.orders.of }} {{ total_orders }} {{ ui_t.orders.matching_orders }}.
+                {{ ui_t.orders.queue_page }} {{ page }} {{ ui_t.orders.of }} {{ total_pages }}.
             </p>
         </div>
 

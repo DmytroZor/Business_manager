@@ -259,7 +259,7 @@ async def _create_assigned_delivery(
         source=source,
         delivery=delivery,
     )
-    return delivery
+    return await _get_delivery(db, delivery.id)
 
 
 async def assign_delivery(
@@ -429,7 +429,7 @@ async def pick_up_delivery(
         source=source,
         delivery=delivery,
     )
-    return delivery
+    return await _get_delivery(db, delivery.id)
 
 
 async def complete_delivery(
@@ -492,7 +492,7 @@ async def complete_delivery(
         source=source,
         delivery=delivery,
     )
-    return delivery
+    return await _get_delivery(db, delivery.id)
 
 
 async def fail_delivery(
@@ -564,4 +564,4 @@ async def fail_delivery(
         source=source,
         delivery=delivery,
     )
-    return delivery
+    return await _get_delivery(db, delivery.id)

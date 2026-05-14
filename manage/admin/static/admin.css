@@ -42,17 +42,23 @@ a {
     display: grid;
     grid-template-columns: 290px 1fr;
     min-height: 100vh;
+    align-items: start;
 }
 
 .sidebar {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 24px;
     padding: 28px 22px;
     background:
         linear-gradient(180deg, rgba(12, 47, 57, 0.98), rgba(24, 78, 87, 0.94)),
         linear-gradient(135deg, rgba(123, 196, 189, 0.18), transparent 50%);
     color: #f7fbfa;
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
 }
 
 .brand-block h1 {
@@ -88,6 +94,9 @@ a {
     display: grid;
     gap: 10px;
     margin-top: 24px;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .sidebar-nav a {
@@ -107,6 +116,49 @@ a {
 .sidebar-footer {
     display: grid;
     gap: 14px;
+    margin-top: auto;
+}
+
+.language-switch {
+    display: grid;
+    gap: 8px;
+}
+
+.language-switch-label {
+    font-size: 0.9rem;
+    color: rgba(247, 251, 250, 0.7);
+}
+
+.language-switch-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: fit-content;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.language-switch-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 94px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    color: rgba(247, 251, 250, 0.88);
+    font-weight: 700;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.language-switch-link:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.language-switch-link.is-active {
+    background: var(--sand);
+    color: var(--ink);
 }
 
 .admin-chip {
@@ -132,6 +184,7 @@ a {
 
 .content {
     padding: 28px;
+    min-width: 0;
 }
 
 .auth-shell {
@@ -238,6 +291,47 @@ a {
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
+}
+
+.pagination-bar {
+    align-items: center;
+}
+
+.page-number-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.page-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--ink);
+    font-weight: 700;
+}
+
+.page-link.is-active {
+    background: var(--sea);
+    border-color: var(--sea);
+    color: #fff;
+}
+
+.page-jump-form {
+    display: inline-flex;
+    align-items: end;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.page-jump-form .field {
+    min-width: 110px;
 }
 
 .workspace-grid {
@@ -372,6 +466,11 @@ a {
     color: #7a2a1b;
 }
 
+.danger-zone {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+}
+
 .order-list {
     display: grid;
     gap: 14px;
@@ -419,6 +518,64 @@ dt {
 
 .stack-layout.compact {
     gap: 12px;
+}
+
+.analytics-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.analytics-list {
+    display: grid;
+    gap: 14px;
+}
+
+.analytics-card {
+    padding: 16px;
+    border-radius: 18px;
+    background: rgba(247, 251, 250, 0.86);
+    border: 1px solid var(--line);
+    display: grid;
+    gap: 14px;
+}
+
+.analytics-card-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.analytics-bars {
+    display: grid;
+    gap: 12px;
+}
+
+.analytics-bar-row {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+}
+
+.analytics-bar {
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    background: rgba(27, 107, 115, 0.12);
+    overflow: hidden;
+}
+
+.analytics-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+}
+
+.quantity-fill {
+    background: linear-gradient(90deg, #1b6b73 0%, #3d9a92 100%);
+}
+
+.revenue-fill {
+    background: linear-gradient(90deg, #d95f4f 0%, #ef9a6d 100%);
 }
 
 .detail-hero {
@@ -649,6 +806,8 @@ dd {
 
     .sidebar {
         gap: 24px;
+        position: static;
+        max-height: none;
     }
 
     .content {

@@ -50,6 +50,7 @@ class ProductOut(BaseModel):
     image_url: str | None = Field(None, description="Optional image shown in admin and catalog.")
     base_unit_price: Decimal = Field(..., description="Base price per unit.")
     last_purchase_price: Decimal | None = Field(None, description="Last known purchase price per unit.")
+    last_purchase_at: date | None = Field(None, description="Date of the most recent purchase receipt.")
     unit: str = Field(..., description="Measurement unit, for example kg or piece.")
     available_quantity: Decimal = Field(..., description="Current free stock available for ordering.")
     reserved_quantity: Decimal = Field(..., description="Quantity reserved for open orders.")
@@ -128,6 +129,7 @@ class ProductUpdate(BaseModel):
 
 
 class ProductStockDocumentRow(BaseModel):
+    product_id: int | None = Field(None, ge=1, description="Optional existing product identifier.")
     name: str = Field(..., max_length=200, description="Product name from the warehouse document.")
     unit: str = Field(default="kg", max_length=20, description="Measurement unit.")
     sale_unit_price: Decimal | None = Field(None, gt=0, description="Optional selling price update.")
@@ -157,6 +159,13 @@ class ProductStockDocumentRow(BaseModel):
     @field_validator("sale_unit_price", "purchase_unit_price", mode="before")
     @classmethod
     def normalize_optional_price(cls, value):
+        if value in (None, ""):
+            return None
+        return value
+
+    @field_validator("product_id", mode="before")
+    @classmethod
+    def normalize_optional_product_id(cls, value):
         if value in (None, ""):
             return None
         return value

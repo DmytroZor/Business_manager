@@ -8,12 +8,12 @@
 <div class="detail-stack">
     <section class="detail-hero">
         <div>
-            <p class="eyebrow">Order detail</p>
+            <p class="eyebrow">{{ ui_t.order_detail.eyebrow }}</p>
             <h3>Order #{{ order.id }}</h3>
-            <p class="page-copy">Placed {{ order.placed_at|datetime }}</p>
+            <p class="page-copy">{{ ui_t.order_detail.placed }} {{ order.placed_at|datetime }}</p>
         </div>
         <div class="detail-summary">
-            <span class="status-pill">{{ order.status|order_status }}</span>
+            <span class="status-pill">{{ format_order_status(order.status) }}</span>
             <strong>{{ order.total_amount|money }}</strong>
         </div>
     </section>
@@ -21,19 +21,19 @@
     <section class="detail-grid">
         <article class="panel">
             <div class="panel-heading">
-                <h4>Customer</h4>
+                <h4>{{ ui_t.order_detail.customer }}</h4>
             </div>
             <dl class="meta-grid">
                 <div>
-                    <dt>Name</dt>
-                    <dd>{{ order.customer.full_name if order.customer else 'Unknown customer' }}</dd>
+                    <dt>{{ ui_t.order_detail.name }}</dt>
+                    <dd>{{ order.customer.full_name if order.customer else ui_t.order_detail.unknown_customer }}</dd>
                 </div>
                 <div>
-                    <dt>Phone</dt>
+                    <dt>{{ ui_t.order_detail.phone }}</dt>
                     <dd>{{ order.customer.phone if order.customer else '-' }}</dd>
                 </div>
                 <div>
-                    <dt>Email</dt>
+                    <dt>{{ ui_t.order_detail.email }}</dt>
                     <dd>{{ order.customer.email if order.customer and order.customer.email else '-' }}</dd>
                 </div>
             </dl>
@@ -41,36 +41,36 @@
 
         <article class="panel">
             <div class="panel-heading">
-                <h4>Delivery address</h4>
+                <h4>{{ ui_t.order_detail.delivery_address }}</h4>
             </div>
             {% if order.delivery_address %}
                 <dl class="meta-grid">
                     <div>
-                        <dt>Street</dt>
+                        <dt>{{ ui_t.order_detail.street }}</dt>
                         <dd>{{ order.delivery_address.street }}</dd>
                     </div>
                     <div>
-                        <dt>Building</dt>
+                        <dt>{{ ui_t.order_detail.building }}</dt>
                         <dd>{{ order.delivery_address.building }}</dd>
                     </div>
                     <div>
-                        <dt>Apartment</dt>
+                        <dt>{{ ui_t.order_detail.apartment }}</dt>
                         <dd>{{ order.delivery_address.apartment or '-' }}</dd>
                     </div>
                     <div>
-                        <dt>Notes</dt>
+                        <dt>{{ ui_t.order_detail.notes }}</dt>
                         <dd>{{ order.delivery_address.notes or '-' }}</dd>
                     </div>
                 </dl>
             {% else %}
-                <p class="muted-copy">No delivery address available.</p>
+                <p class="muted-copy">{{ ui_t.order_detail.no_delivery_address }}</p>
             {% endif %}
         </article>
     </section>
 
     <section class="panel">
         <div class="panel-heading">
-            <h4>Items</h4>
+            <h4>{{ ui_t.order_detail["items"] }}</h4>
         </div>
         <form
             class="stack-form"
@@ -89,10 +89,10 @@
                 <table class="data-table">
                     <thead>
                     <tr>
-                        <th>Product</th>
-                        <th>Quantity</th>
-                        <th>Unit price</th>
-                        <th>Subtotal</th>
+                        <th>{{ ui_t.order_detail.product }}</th>
+                        <th>{{ ui_t.order_detail.quantity }}</th>
+                        <th>{{ ui_t.order_detail.unit_price }}</th>
+                        <th>{{ ui_t.order_detail.subtotal }}</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -122,7 +122,7 @@
             </div>
             {% if can_edit_order_items(order) %}
                 <div class="toolbar-actions">
-                    <button class="secondary-button" type="submit">Update item quantities</button>
+                    <button class="secondary-button" type="submit">{{ ui_t.order_detail.update_item_quantities }}</button>
                 </div>
             {% endif %}
         </form>
@@ -134,20 +134,20 @@
     <section class="detail-grid">
         <article class="panel">
             <div class="panel-heading">
-                <h4>Delivery</h4>
+                <h4>{{ ui_t.order_detail.delivery }}</h4>
             </div>
             {% if order.active_delivery %}
                 <dl class="meta-grid">
                     <div>
-                        <dt>Status</dt>
-                        <dd>{{ order.active_delivery.status|delivery_status }}</dd>
+                        <dt>{{ ui_t.orders.status }}</dt>
+                        <dd>{{ format_delivery_status(order.active_delivery.status) }}</dd>
                     </div>
                     <div>
-                        <dt>Fee</dt>
+                        <dt>{{ ui_t.order_detail.fee }}</dt>
                         <dd>{{ order.active_delivery.fee|money }}</dd>
                     </div>
                     <div>
-                        <dt>Courier</dt>
+                        <dt>{{ ui_t.order_detail.courier }}</dt>
                         <dd>
                             {% if order.active_delivery.courier %}
                                 {{ order.active_delivery.courier.full_name }}
@@ -157,30 +157,30 @@
                         </dd>
                     </div>
                     <div>
-                        <dt>Assigned at</dt>
+                        <dt>{{ ui_t.order_detail.assigned_at }}</dt>
                         <dd>{{ order.active_delivery.assigned_at|datetime }}</dd>
                     </div>
                     <div>
-                        <dt>Picked up at</dt>
+                        <dt>{{ ui_t.order_detail.picked_up_at }}</dt>
                         <dd>{{ order.active_delivery.picked_up_at|datetime }}</dd>
                     </div>
                     <div>
-                        <dt>Delivered at</dt>
+                        <dt>{{ ui_t.order_detail.delivered_at }}</dt>
                         <dd>{{ order.active_delivery.delivered_at|datetime }}</dd>
                     </div>
                     <div>
-                        <dt>Failure reason</dt>
+                        <dt>{{ ui_t.order_detail.failure_reason }}</dt>
                         <dd>{{ order.active_delivery.failed_reason or '-' }}</dd>
                     </div>
                 </dl>
             {% else %}
-                <p class="muted-copy">No active delivery is attached to this order.</p>
+                <p class="muted-copy">{{ ui_t.order_detail.no_active_delivery }}</p>
             {% endif %}
         </article>
 
         <article class="panel">
             <div class="panel-heading">
-                <h4>Actions</h4>
+                <h4>{{ ui_t.order_detail.actions }}</h4>
             </div>
 
             {% if can_assign_order(order) %}
@@ -198,9 +198,9 @@
                     <input type="hidden" name="date_filter" value="{{ date_filter }}">
                     <input type="hidden" name="page" value="{{ page }}">
                     <label class="field">
-                        <span>Assign courier</span>
+                        <span>{{ ui_t.order_detail.assign_courier }}</span>
                         <select name="courier_id" required>
-                            <option value="">Select courier</option>
+                            <option value="">{{ ui_t.order_detail.select_courier }}</option>
                             {% for courier in couriers %}
                                 <option value="{{ courier.profile_id }}">
                                     {{ courier.full_name }} · {{ courier.phone }}
@@ -209,10 +209,10 @@
                         </select>
                     </label>
                     <label class="field">
-                        <span>Delivery fee</span>
+                        <span>{{ ui_t.order_detail.delivery_fee }}</span>
                         <input type="text" name="fee" value="0.00">
                     </label>
-                    <button class="primary-button" type="submit">Assign courier</button>
+                    <button class="primary-button" type="submit">{{ ui_t.order_detail.assign_courier_button }}</button>
                 </form>
             {% endif %}
 
@@ -231,31 +231,31 @@
                     <input type="hidden" name="date_filter" value="{{ date_filter }}">
                     <input type="hidden" name="page" value="{{ page }}">
                     <label class="field">
-                        <span>Cancellation reason</span>
+                        <span>{{ ui_t.order_detail.cancellation_reason }}</span>
                         <select name="reason_code">
-                            <option value="">Select a reason</option>
+                            <option value="">{{ ui_t.order_detail.select_reason }}</option>
                             {% for value, label in order_cancellation_reason_options %}
                                 <option value="{{ value }}">{{ label }}</option>
                             {% endfor %}
                         </select>
                     </label>
                     <label class="field">
-                        <span>Manager note</span>
-                        <textarea name="reason_note" rows="3" placeholder="Optional extra details for the team"></textarea>
+                        <span>{{ ui_t.order_detail.manager_note }}</span>
+                        <textarea name="reason_note" rows="3" placeholder="{{ ui_t.order_detail.manager_note_placeholder }}"></textarea>
                     </label>
-                    <button class="danger-button" type="submit">Cancel order</button>
+                    <button class="danger-button" type="submit">{{ ui_t.order_detail.cancel_order }}</button>
                 </form>
             {% endif %}
 
             {% if not can_assign_order(order) and not can_cancel_order(order) %}
-                <p class="muted-copy">No admin actions are available for the current state of this order.</p>
+                <p class="muted-copy">{{ ui_t.order_detail.no_actions }}</p>
             {% endif %}
         </article>
     </section>
 
     <section class="panel">
         <div class="panel-heading">
-            <h4>Status timeline</h4>
+            <h4>{{ ui_t.order_detail.status_timeline }}</h4>
         </div>
         {% if order.events %}
             <div class="order-list">
@@ -273,18 +273,18 @@
                                 {% elif event.actor_role %}
                                     {{ event.actor_role }}
                                 {% else %}
-                                    System
+                                    {{ ui_t.order_detail.system }}
                                 {% endif %}
                             </span>
                         </div>
                         <div class="order-row-foot">
                             <span>
                                 {% if event.previous_order_status or event.new_order_status %}
-                                    Order: {{ event.previous_order_status|order_status if event.previous_order_status else '-' }} → {{ event.new_order_status|order_status if event.new_order_status else '-' }}
+                                    {{ ui_t.order_detail.order_label }}: {{ format_order_status(event.previous_order_status) if event.previous_order_status else '-' }} → {{ format_order_status(event.new_order_status) if event.new_order_status else '-' }}
                                 {% elif event.previous_delivery_status or event.new_delivery_status %}
-                                    Delivery: {{ event.previous_delivery_status|delivery_status if event.previous_delivery_status else '-' }} → {{ event.new_delivery_status|delivery_status if event.new_delivery_status else '-' }}
+                                    {{ ui_t.order_detail.delivery_label }}: {{ format_delivery_status(event.previous_delivery_status) if event.previous_delivery_status else '-' }} → {{ format_delivery_status(event.new_delivery_status) if event.new_delivery_status else '-' }}
                                 {% else %}
-                                    Event recorded
+                                    {{ ui_t.order_detail.event_recorded }}
                                 {% endif %}
                             </span>
                         </div>
@@ -295,7 +295,7 @@
                 {% endfor %}
             </div>
         {% else %}
-            <p class="muted-copy">No order events have been recorded yet.</p>
+            <p class="muted-copy">{{ 'Ще немає зафіксованих подій по цьому замовленню.' if ui_lang == 'uk' else 'No order events have been recorded yet.' }}</p>
         {% endif %}
     </section>
 </div>

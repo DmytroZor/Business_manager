@@ -81,6 +81,7 @@ async def test_receipt_document_creates_supplier_product_batch_and_history(db_se
     assert product.available_quantity == Decimal("8.500")
     assert product.reserved_quantity == Decimal("0.000")
     assert product.last_purchase_price == Decimal("170.00")
+    assert product.last_purchase_at == date(2026, 5, 4)
 
     supplier = await db_session.scalar(select(Supplier).where(Supplier.name == "Fresh Sea Supply"))
     document = await db_session.scalar(select(StockDocument).where(StockDocument.document_number == "REC-2026-05-04-01"))

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">{{ stock_t.list_eyebrow }}</p>
+        <h2>{{ stock_t.list_title }}</h2>
+        <p class="page-copy">{{ stock_t.list_copy }}</p>
+    </div>
+    <div class="toolbar-actions">
+        <a class="primary-button" href="{{ stock_document_create_url }}">{{ stock_t.open_create }}</a>
+    </div>
+</section>
+
+{% if message %}
+    <div class="banner success">{{ message }}</div>
+{% endif %}
+
+<form class="panel toolbar" method="get" action="{{ url_for('admin_stock_documents_page') }}">
+    <label class="field">
+        <span>{{ 'Період' if ui_lang == 'uk' else 'Period' }}</span>
+        <select name="period">
+            {% for value, label in stock_document_period_options %}
+                <option value="{{ value }}" {% if stock_document_period == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <div class="toolbar-actions">
+        <button class="primary-button" type="submit">{{ ui_t.orders.apply }}</button>
+        <a class="secondary-button" href="{{ url_for('admin_stock_documents_page') }}">{{ ui_t.orders.reset }}</a>
+    </div>
+</form>
+
+<section class="panel">
+    <div class="panel-heading">
+        <h3>{{ stock_t.recent_title }}</h3>
+        <p>{{ stock_t.download_caption }}</p>
+    </div>
+
+    {% if recent_stock_documents %}
+        <div class="stack-layout">
+            {% for document in recent_stock_documents %}
+                <article class="order-card">
+                    <div class="order-card-header">
+                        <div>
+                            <strong>
+                                <a href="{{ url_for('admin_stock_document_export', document_id=document.id) }}">{{ document.document_number }}</a>
+                            </strong>
+                            <p class="table-subline">
+                                {{ document.document_date }}
+                                {% if document.supplier_name %}- {{ document.supplier_name }}{% endif %}
+                                {% if document.created_by_name %}- {{ document.created_by_name }}{% endif %}
+                            </p>
+                        </div>
+                        <div class="product-badges">
+                            <span class="status-pill success">{{ document.lines|length }} {{ stock_t.rows }}</span>
+                        </div>
+                    </div>
+                    {% if document.note %}
+                        <p class="muted-copy">{{ document.note }}</p>
+                    {% endif %}
+                    <div class="table-shell">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>{{ stock_t.product }}</th>
+                                <th>{{ stock_t.input_qty }}</th>
+                                <th>{{ stock_t.applied_delta }}</th>
+                                <th>{{ stock_t.sell_price }}</th>
+                                <th>{{ stock_t.purchase }}</th>
+                                <th>{{ stock_t.batch }}</th>
+                                <th>{{ stock_t.expires }}</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for item in document.lines %}
+                                <tr>
+                                    <td>{{ item.product_name }}</td>
+                                    <td>{{ item.quantity_value|quantity }} {{ item.unit }}</td>
+                                    <td>{{ item.applied_delta|quantity }} {{ item.unit }}</td>
+                                    <td>{% if item.sale_unit_price is not none %}{{ item.sale_unit_price|money }}{% else %}--{% endif %}</td>
+                                    <td>{% if item.purchase_unit_price is not none %}{{ item.purchase_unit_price|money }}{% else %}--{% endif %}</td>
+                                    <td>{{ item.batch_code or item.serial_code or '--' }}</td>
+                                    <td>{{ item.expires_at or '--' }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <article class="empty-card slim">
+            <h3>{{ stock_t.empty_title }}</h3>
+            <p>{{ stock_t.empty_copy }}</p>
+        </article>
+    {% endif %}
+</section>
+{% endblock %}

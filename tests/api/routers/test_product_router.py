@@ -1,6 +1,8 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from core.db import get_db
+from core.models import UserRole
 from routers import product_router
 from routers.user_router import get_current_user
 from tests.conftest import create_test_client
@@ -82,3 +84,46 @@ def test_create_product_with_auth_returns_201(monkeypatch):
         },
     )
     assert response.status_code == 201
+
+
+def test_admin_sales_analytics_requires_admin_and_returns_payload(monkeypatch):
+    monkeypatch.setattr(
+        product_router.analytics_service,
+        "get_product_sales_analytics",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                period="month",
+                sort_by="quantity",
+                generated_at="2026-05-06T10:00:00Z",
+                period_start="2026-04-06T00:00:00Z",
+                period_end="2026-05-07T00:00:00Z",
+                summary=SimpleNamespace(
+                    total_products=2,
+                    total_quantity="12.000",
+                    total_revenue="2200.00",
+                    total_orders=5,
+                ),
+                items=[
+                    SimpleNamespace(
+                        product_id=1,
+                        product_name="Sea Bass",
+                        product_sku="RIBA-0001",
+                        unit="kg",
+                        total_quantity="8.000",
+                        total_revenue="1600.00",
+                        order_count=3,
+                    )
+                ],
+            )
+        ),
+    )
+    client = create_test_client(
+        product_router.router,
+        dependency_overrides={get_db: _fake_db, get_current_user: lambda: SimpleNamespace(role=UserRole.ADMIN)},
+    )
+
+    response = client.get("/products/admin/sales-analytics")
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["total_products"] == 2
+    assert response.json()["items"][0]["product_name"] == "Sea Bass"

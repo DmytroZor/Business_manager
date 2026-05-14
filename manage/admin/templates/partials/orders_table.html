@@ -12,10 +12,10 @@
             >
                 <div class="order-row-top">
                     <strong>#{{ order.id }}</strong>
-                    <span class="status-pill">{{ order.status|order_status }}</span>
+                    <span class="status-pill">{{ format_order_status(order.status) }}</span>
                 </div>
                 <div class="order-row-body">
-                    <span>{{ order.customer.full_name if order.customer else 'Unknown customer' }}</span>
+                    <span>{{ order.customer.full_name if order.customer else ui_t.orders_table.unknown_customer }}</span>
                     <span>{{ order.customer.phone if order.customer else '-' }}</span>
                     <span>{{ order.total_amount|money }}</span>
                 </div>
@@ -25,7 +25,7 @@
                         {% if order.active_delivery and order.active_delivery.courier %}
                             {{ order.active_delivery.courier.full_name }}
                         {% else %}
-                            Courier not assigned
+                            {{ ui_t.orders_table.courier_not_assigned }}
                         {% endif %}
                     </span>
                 </div>
@@ -33,29 +33,65 @@
         {% endfor %}
     </div>
     {% if total_pages > 1 %}
-        <div class="toolbar-actions">
+        {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+        {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+        <div class="toolbar-actions pagination-bar">
             {% if page > 1 %}
                 <a
                     class="secondary-button"
                     href="{{ url_for('admin_orders_dashboard') }}?page={{ page - 1 }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}"
                 >
-                    Previous 10
+                    {{ ui_t.orders_table.previous_10 }}
                 </a>
             {% endif %}
-            <span class="table-subline">Queue page {{ page }} / {{ total_pages }}</span>
+            <div class="page-number-group">
+                {% if start_page > 1 %}
+                    <a class="page-link" href="{{ url_for('admin_orders_dashboard') }}?page=1{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}">1</a>
+                    {% if start_page > 2 %}
+                        <span class="table-subline">…</span>
+                    {% endif %}
+                {% endif %}
+                {% for page_number in range(start_page, end_page + 1) %}
+                    <a
+                        class="page-link {% if page_number == page %}is-active{% endif %}"
+                        href="{{ url_for('admin_orders_dashboard') }}?page={{ page_number }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}"
+                    >
+                        {{ page_number }}
+                    </a>
+                {% endfor %}
+                {% if end_page < total_pages %}
+                    {% if end_page < total_pages - 1 %}
+                        <span class="table-subline">…</span>
+                    {% endif %}
+                    <a class="page-link" href="{{ url_for('admin_orders_dashboard') }}?page={{ total_pages }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}">{{ total_pages }}</a>
+                {% endif %}
+            </div>
+            <span class="table-subline">{{ ui_t.orders_table.queue_page }} {{ page }} / {{ total_pages }}</span>
             {% if page < total_pages %}
                 <a
                     class="secondary-button"
                     href="{{ url_for('admin_orders_dashboard') }}?page={{ page + 1 }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if status_filter %}&status_filter={{ status_filter|urlencode }}{% endif %}{% if queue_filter %}&queue_filter={{ queue_filter|urlencode }}{% endif %}{% if date_filter %}&date_filter={{ date_filter|urlencode }}{% endif %}{% if selected_order_id %}&selected_order_id={{ selected_order_id }}{% endif %}"
                 >
-                    Next 10
+                    {{ ui_t.orders_table.next_10 }}
                 </a>
             {% endif %}
+            <form class="page-jump-form" method="get" action="{{ url_for('admin_orders_dashboard') }}">
+                <input type="hidden" name="search" value="{{ search }}">
+                <input type="hidden" name="status_filter" value="{{ status_filter }}">
+                <input type="hidden" name="queue_filter" value="{{ queue_filter }}">
+                <input type="hidden" name="date_filter" value="{{ date_filter }}">
+                <input type="hidden" name="selected_order_id" value="{{ selected_order_id or '' }}">
+                <label class="field">
+                    <span>{{ 'Сторінка' if ui_lang == 'uk' else 'Page' }}</span>
+                    <input type="number" name="page" min="1" max="{{ total_pages }}" value="{{ page }}">
+                </label>
+                <button class="secondary-button" type="submit">{{ 'Перейти' if ui_lang == 'uk' else 'Go' }}</button>
+            </form>
         </div>
     {% endif %}
 {% else %}
     <div class="empty-card slim">
-        <h3>No orders match the current filters</h3>
-        <p>Try another status or a broader search query.</p>
+        <h3>{{ ui_t.orders_table.no_orders_title }}</h3>
+        <p>{{ ui_t.orders_table.no_orders_copy }}</p>
     </div>
 {% endif %}
